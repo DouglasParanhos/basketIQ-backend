@@ -21,12 +21,12 @@ os.environ.setdefault("BASKETIQ_STORAGE_BACKEND", "memory")
 os.environ.setdefault("BASKETIQ_QUEUE_BACKEND", "inline")
 os.environ.setdefault("BASKETIQ_RATE_LIMIT_ENABLED", "false")
 
-from sqlalchemy import insert  # noqa: E402
+from sqlalchemy import insert
 
-from basketiq.auth.sessions import create_session  # noqa: E402
-from basketiq.config import get_settings  # noqa: E402
-from basketiq.db.models import Product, Receipt, ReceiptLine, User  # noqa: E402
-from basketiq.db.session import get_sessionmaker  # noqa: E402
+from basketiq.auth.sessions import create_session
+from basketiq.config import get_settings
+from basketiq.db.models import Product, Receipt, ReceiptLine, User
+from basketiq.db.session import get_sessionmaker
 
 MERCHANTS = ["PINGO_DOCE", "LIDL", "CONTINENTE", "AUCHAN"]
 PRODUCTS = [f"PRODUTO SINTETICO {i:03d}" for i in range(300)]
@@ -46,7 +46,12 @@ def seed(lines: int, seed_value: int = 7) -> tuple[uuid.UUID, str, str]:
         db.flush()
         product_ids = []
         for name in PRODUCTS:
-            p = Product(canonical_name=name, normalized_key=f"{name} {uuid.uuid4().hex[:6]}", unit_type="un", owner_user_id=user.id)
+            p = Product(
+                canonical_name=name,
+                normalized_key=f"{name} {uuid.uuid4().hex[:6]}",
+                unit_type="un",
+                owner_user_id=user.id,
+            )
             db.add(p)
             db.flush()
             product_ids.append(p.id)
@@ -137,7 +142,8 @@ def bench(access_token: str, runs: int = 30) -> None:
             assert resp.status_code == 200, resp.text
         timings.sort()
         p95 = timings[int(len(timings) * 0.95) - 1]
-        print(f"{name:14} p50={statistics.median(timings):7.1f} ms  p95={p95:7.1f} ms  p99={timings[-1]:7.1f} ms")
+        p50 = statistics.median(timings)
+        print(f"{name:14} p50={p50:7.1f} ms  p95={p95:7.1f} ms  p99={timings[-1]:7.1f} ms")
     product = client.get("/v1/products?limit=1").json()[0]["id"]
     t = time.perf_counter()
     client.get(f"/v1/products/{product}/analytics")

@@ -11,7 +11,7 @@ os.environ.setdefault("BASKETIQ_ENV", "test")
 os.environ.setdefault("BASKETIQ_STORAGE_BACKEND", "memory")
 os.environ.setdefault("BASKETIQ_QUEUE_BACKEND", "inline")
 
-from basketiq.api.main import app  # noqa: E402
+from basketiq.api.main import app
 
 target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("openapi.json")
 target.write_text(json.dumps(app.openapi(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

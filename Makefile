@@ -2,7 +2,7 @@
 export UV_PROJECT_ENVIRONMENT ?= $(HOME)/.venvs/basketiq
 RUN = uv run --frozen
 
-.PHONY: install up up-llm down logs migrate test test-all lint typecheck security golden golden-real openapi fixtures seed-perf bench
+.PHONY: install up up-llm down logs migrate test test-all lint typecheck security golden golden-real traceability openapi fixtures seed-perf bench
 
 install:            ## install all dependencies (OCR + LLM extras, dev tools)
 	uv sync --frozen --all-extras
@@ -46,6 +46,9 @@ golden:             ## synthetic golden set against the committed baseline
 
 golden-real:        ## real receipts (kept outside git): make golden-real GOLDEN_REAL_DIR=../Receipts
 	GOLDEN_REAL_DIR=$(GOLDEN_REAL_DIR) $(RUN) pytest -m golden_real tests/golden
+
+traceability:       ## requirement → test matrix (fails on uncovered test-plan scenarios)
+	$(RUN) python scripts/traceability.py --out reports/traceability.md
 
 openapi:            ## refresh the API contract for the frontend
 	$(RUN) python scripts/export_openapi.py openapi.json

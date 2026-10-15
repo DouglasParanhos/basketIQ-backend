@@ -56,6 +56,7 @@ def test_field_below_threshold_requires_review() -> None:
     assert ev.line_flags[0] == ["low_confidence:quantity"]
 
 
+@pytest.mark.req("RF-06")
 def test_threshold_can_vary_per_field() -> None:
     v = view()
     assert codes(v, Thresholds(per_field={"quantity": 0.95})) == {"low_confidence"}
@@ -69,12 +70,14 @@ def test_manual_edit_counts_as_certain() -> None:
     assert codes(v) == set()
 
 
+@pytest.mark.req("RF-06")
 def test_totals_outside_tolerance() -> None:
     assert "totals_mismatch" in codes(view(total_cents=310))
     assert codes(view(total_cents=302)) == set()  # within the 2 cent tolerance
     assert "totals_mismatch" in codes(view(total_cents=302), Thresholds(tolerance_cents=1))
 
 
+@pytest.mark.req("RF-06")
 def test_vat_summary_must_match_total() -> None:
     assert "totals_mismatch" in codes(view(subtotal_cents=250, tax_cents=10))
 
@@ -87,6 +90,7 @@ def test_pending_quantity_blocks_confirmation() -> None:
     assert "quantity_pending" in {r.code for r in ev.blocking}
 
 
+@pytest.mark.req("F-10")
 def test_unknown_merchant_and_missing_date_are_blocking() -> None:
     ev = evaluate(view(merchant="UNKNOWN", purchase_at=None), Thresholds())
     assert {"merchant_unknown", "date_missing"} <= {r.code for r in ev.blocking}
@@ -97,6 +101,7 @@ def test_suspected_duplicate_prevents_auto_confirm() -> None:
     assert "possible_duplicate" in codes(view(duplicate_suspected=True))
 
 
+@pytest.mark.req("PT-7")
 def test_discounts_are_part_of_reconciliation() -> None:
     v = view(total_cents=250)
     v.lines[1].discount_cents = 50

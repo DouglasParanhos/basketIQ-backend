@@ -15,6 +15,7 @@ def admin(client: TestClient, login: Any) -> TestClient:
     return client
 
 
+@pytest.mark.req("SEC-authz")
 def test_regular_user_cannot_use_admin(client: TestClient, login: Any) -> None:
     login(client)
     assert client.get("/v1/admin/jobs").status_code == 403

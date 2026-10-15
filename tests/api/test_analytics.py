@@ -134,6 +134,7 @@ def test_empty_period_and_insufficient_data(history: TestClient) -> None:
     assert one_day["series"]["insufficient_data"]
 
 
+@pytest.mark.req("RF-09")
 def test_year_view_uses_monthly_buckets(history: TestClient) -> None:
     s = history.get("/v1/analytics/summary?from=2026-01-01&to=2026-12-31").json()
     assert s["series"]["granularity"] == "month"
@@ -141,6 +142,7 @@ def test_year_view_uses_monthly_buckets(history: TestClient) -> None:
     assert points["2026-08"] == 229 and points["2026-09"] == 455 and points["2026-10"] == 30
 
 
+@pytest.mark.req("RF-11")
 def test_invalid_ranges(history: TestClient) -> None:
     assert history.get("/v1/analytics/summary?from=2026-09-30&to=2026-09-01").status_code == 422
     assert history.get("/v1/analytics/summary?from=2020-01-01&to=2026-09-01").status_code == 422

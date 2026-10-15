@@ -15,6 +15,8 @@ def rejected(data: bytes, mime: str, max_pages: int = 5) -> DocumentRejectedErro
     return exc.value
 
 
+@pytest.mark.req("F-04")
+@pytest.mark.req("F-05")
 def test_valid_pdf_and_image() -> None:
     assert validate_document(make_pdf(PINGO_LINES), "application/pdf", MAX, 5).source_type == SourceType.PDF
     assert validate_document(make_png(), "image/png", MAX, 5).source_type == SourceType.IMAGE

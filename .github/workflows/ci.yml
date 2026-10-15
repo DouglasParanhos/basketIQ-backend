@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.13.1"
+  PYTHON_VERSION: "3.12"
+  UV_FROZEN: "1"
+
+jobs:
+  quality:
+    name: Lint, types, security
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      # OCR/LLM extras are imported lazily and not needed for static checks.
+      - run: uv sync
+      - name: Ruff
+        run: |
+          uv run ruff format --check src tests scripts alembic
+          uv run ruff check src tests scripts alembic
+      - name: Mypy
+        run: uv run mypy
+      - name: Bandit (SAST)
+        run: uv run bandit -q -r src -ll
+      - name: Dependency audit
+        run: uv run pip-audit --skip-editable
+
+  tests:
+    name: Migrations, tests, golden set, traceability
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: basketiq
+          POSTGRES_PASSWORD: basketiq
+          POSTGRES_DB: basketiq
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U basketiq" --health-interval 3s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      BASKETIQ_DATABASE_URL: postgresql+psycopg://basketiq:basketiq@localhost:5432/basketiq
+      BASKETIQ_TEST_DATABASE_URL: postgresql+psycopg://basketiq:basketiq@localhost:5432/basketiq_test
+      BASKETIQ_TEST_S3_ENDPOINT: http://localhost:9000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - run: uv sync
+      - name: Start S3-compatible storage (SeaweedFS)
+        run: |
+          docker run -d --name storage -p 9000:8333 \
+            -v "$PWD/docker/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro" \
+            chrislusf/seaweedfs:4.48 server -dir=/data -s3 -s3.port=8333 \
+            -s3.config=/etc/seaweedfs/s3.json -s3.allowedOrigins=http://localhost:5173 \
+            -master.volumeSizeLimitMB=256
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:9000/healthz >/dev/null && exit 0
+            sleep 2
+          done
+          docker logs storage
+          exit 1
+      - name: Migrations (upgrade, full downgrade, upgrade)
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+      - name: Tests (unit, API, integration, golden without OCR)
+        run: uv run pytest -m "not ocr and not golden_real and not llm"
+      - name: Golden set regression (synthetic, no OCR)
+        run: uv run python -m basketiq.eval.golden --dir tests/golden/synthetic --baseline tests/golden/baseline.json
+      - name: Traceability matrix
+        run: uv run python scripts/traceability.py --out reports/traceability.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: traceability
+          path: reports/traceability.md
+
+  ocr:
+    name: Local OCR golden set
+    runs-on: ubuntu-24.04
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: System libraries for OpenCV/Paddle
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1
+      - run: uv sync --all-extras
+      - uses: actions/cache@v4
+        with:
+          path: ~/.paddlex
+          key: paddlex-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: OCR golden cases against the OCR baseline
+        run: |
+          uv run pytest -m ocr tests/golden
+          uv run python -m basketiq.eval.golden --dir tests/golden/synthetic --ocr --baseline tests/golden/baseline_ocr.json
+
+  docker:
+    name: Docker images
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target: [api, worker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: false
+          tags: basketiq-${{ matrix.target }}:ci
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}

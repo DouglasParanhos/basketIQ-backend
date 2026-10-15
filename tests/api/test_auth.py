@@ -115,12 +115,14 @@ def test_cancelled_login_returns_clear_error(client: TestClient, idp: FakeIdP) -
     assert "biq_at" not in client.cookies
 
 
+@pytest.mark.req("SEC-tokens")
 def test_state_mismatch_is_rejected(client: TestClient, idp: FakeIdP) -> None:
     client.get("/v1/auth/login", follow_redirects=False)
     resp = client.get("/v1/auth/callback?code=abc&state=forged", follow_redirects=False)
     assert resp.headers["location"].endswith("error=invalid_request")
 
 
+@pytest.mark.req("SEC-tokens")
 def test_wrong_audience_or_nonce_is_rejected(client: TestClient, idp: FakeIdP) -> None:
     idp.next_claims = {"aud": "someone-else"}
     assert sign_in(client, idp).headers["location"].endswith("error=login_failed")
@@ -141,6 +143,8 @@ def test_no_password_or_other_login_method_exists(client: TestClient) -> None:
     )
 
 
+@pytest.mark.req("F-03a")
+@pytest.mark.req("RF-01")
 def test_production_rejects_non_google_issuer() -> None:
     from basketiq.config import Settings
 
@@ -203,6 +207,7 @@ def test_login_is_rate_limited(client: TestClient, idp: FakeIdP) -> None:
     assert body["code"] == "rate_limited" and body["request_id"]
 
 
+@pytest.mark.req("RF-admin")
 def test_admin_role_from_configuration(client: TestClient, idp: FakeIdP) -> None:
     idp.next_claims = {"email": "admin@example.test", "sub": "admin-1"}
     sign_in(client, idp)

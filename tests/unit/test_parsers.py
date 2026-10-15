@@ -110,6 +110,7 @@ def test_invalid_ocr_date_is_discarded_and_sources_are_cross_checked() -> None:
     assert conf >= 0.9
 
 
+@pytest.mark.req("RF-06")
 def test_conflicting_single_dates_get_low_confidence() -> None:
     doc = doc_from_lines(["2026-10-10 10:00", "2026-11-10 10:00"])
     _, conf = choose_purchase_datetime(parse_date_candidates(doc.lines))

@@ -46,6 +46,7 @@ def test_multiply_cents_rounds_half_up(qty: str, price: int, expected: int) -> N
     assert multiply_cents(Decimal(qty), price) == expected
 
 
+@pytest.mark.req("PT-7")
 def test_no_float_rounding_drift() -> None:
     # 0.1 + 0.2 style errors must not exist: everything is Decimal/int.
     assert sum(multiply_cents(Decimal("0.1"), 10) for _ in range(10)) == 10

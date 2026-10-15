@@ -147,6 +147,7 @@ def test_interrupted_job_is_retried_idempotently(
     assert receipt["status"] == "CONFIRMED" and len(receipt["lines"]) == 4  # no duplicated lines
 
 
+@pytest.mark.req("F-25")
 def test_duplicate_queue_message_is_harmless(
     client: TestClient, user: Any, storage: Any, queue: Any, run_jobs: Any, db: Any
 ) -> None:
@@ -157,6 +158,7 @@ def test_duplicate_queue_message_is_harmless(
     assert db.scalar(select(ProcessingJob)).attempt_count == 1
 
 
+@pytest.mark.req("F-25")
 def test_retries_exhausted_end_in_temporary_failure(
     client: TestClient, user: Any, storage: Any, run_jobs: Any
 ) -> None:
@@ -168,6 +170,7 @@ def test_retries_exhausted_end_in_temporary_failure(
     assert receipt["error"]["action"].startswith("Ocorreu uma falha temporária")
 
 
+@pytest.mark.req("F-25")
 def test_stuck_job_is_requeued_by_sweeper(
     client: TestClient, user: Any, storage: Any, queue: Any, db: Any
 ) -> None:
@@ -212,6 +215,7 @@ def test_low_confidence_receipt_waits_for_review(client: TestClient, review_rece
 
 @pytest.mark.req("F-13")
 @pytest.mark.req("PT-AC-6")
+@pytest.mark.req("RF-07")
 def test_edit_line_is_marked_manual_and_recalculated(
     client: TestClient, review_receipt: dict[str, Any]
 ) -> None:
@@ -233,6 +237,7 @@ def test_edit_line_is_marked_manual_and_recalculated(
 
 
 @pytest.mark.req("F-14")
+@pytest.mark.req("RF-07")
 def test_add_remove_and_split_lines(client: TestClient, review_receipt: dict[str, Any]) -> None:
     rid, lines = review_receipt["id"], review_receipt["lines"]
     keep = [{"id": line["id"]} for line in lines[:-1]]  # remove the banana line (2,07)
@@ -261,6 +266,7 @@ def test_add_remove_and_split_lines(client: TestClient, review_receipt: dict[str
     assert [line["line_number"] for line in body["lines"]] == [1, 2, 3, 4, 5, 6]
 
 
+@pytest.mark.req("F-15")
 def test_fix_total_then_confirm(client: TestClient, review_receipt: dict[str, Any]) -> None:
     rid = review_receipt["id"]
     body = client.patch(
@@ -347,6 +353,7 @@ def test_user_chooses_merchant_or_marks_unsupported(
 
 
 @pytest.mark.req("F-17")
+@pytest.mark.req("RF-08")
 def test_duplicate_detected_before_upload(client: TestClient, user: Any, storage: Any, run_jobs: Any) -> None:
     data = make_pdf(PINGO_LINES)
     import_receipt(client, storage, run_jobs, data)
@@ -369,6 +376,7 @@ def test_duplicate_detected_before_upload(client: TestClient, user: Any, storage
 
 
 @pytest.mark.req("F-17")
+@pytest.mark.req("RF-08")
 def test_attribute_duplicate_requires_decision(
     client: TestClient, user: Any, storage: Any, run_jobs: Any
 ) -> None:
@@ -450,6 +458,7 @@ def test_retention_job_purges_originals_after_30_days(
     )
 
 
+@pytest.mark.req("RF-12")
 def test_abandoned_uploads_are_cleaned(client: TestClient, user: Any, storage: Any, db: Any) -> None:
     from basketiq.config import get_settings
     from basketiq.workers.scheduler import purge_abandoned_uploads
@@ -502,6 +511,7 @@ def test_user_cannot_read_change_or_delete_another_users_data(
     assert client.get(f"/v1/receipts/{rid}").status_code == 200
 
 
+@pytest.mark.req("SEC-authz")
 def test_endpoints_require_authentication(client: TestClient) -> None:
     for method, path in [
         ("get", "/v1/receipts"),
@@ -515,6 +525,7 @@ def test_endpoints_require_authentication(client: TestClient) -> None:
         assert set(resp.json()) >= {"code", "message", "request_id"}
 
 
+@pytest.mark.req("RF-12")
 def test_privacy_consent_is_required_for_receipts(client: TestClient, login: Any) -> None:
     login(client, consent=False)
     assert client.get("/v1/receipts").json()["code"] == "privacy_consent_required"
@@ -522,6 +533,7 @@ def test_privacy_consent_is_required_for_receipts(client: TestClient, login: Any
     assert client.get("/v1/receipts").status_code == 200
 
 
+@pytest.mark.req("RF-12")
 def test_list_pagination_and_filters(client: TestClient, user: Any, storage: Any, run_jobs: Any) -> None:
     for name in ("pingo_doce_text", "lidl_text", "continente_text"):
         import_receipt(client, storage, run_jobs, synthetic(name))

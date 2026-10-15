@@ -100,6 +100,8 @@ def test_ambiguous_line_goes_to_local_llm_and_is_validated() -> None:
     assert out.status == ReceiptStatus.REVIEW_REQUIRED
 
 
+@pytest.mark.req("F-29")
+@pytest.mark.req("PT-6")
 def test_llm_values_without_evidence_are_rejected() -> None:
     lines = ["Artigos", "C PAO 1,00", "XPTO ?? 2,50", "Resumo", "TOTAL A PAGAR 3,50", "2026-09-01 10:00"]
     invented = LlmProposals(
@@ -122,6 +124,7 @@ def test_llm_values_without_evidence_are_rejected() -> None:
     assert unresolved and unresolved[0].line_total_cents == 250  # LLM proposal discarded
 
 
+@pytest.mark.req("F-29")
 def test_llm_unavailable_falls_back_to_review() -> None:
     lines = [
         "Pingo Doce",
@@ -186,6 +189,7 @@ def test_external_unavailable_returns_to_manual_review() -> None:
     assert out.status == ReceiptStatus.REVIEW_REQUIRED
 
 
+@pytest.mark.req("F-30")
 def test_external_disabled_by_default() -> None:
     out = run_pipeline(
         PipelineRequest(make_png(), "image/png"), deps(ocr=FakeOcr(["?? ##", "1,00 2,00"], conf=0.4))
@@ -207,11 +211,13 @@ def test_unknown_merchant_requires_user_choice() -> None:
     assert "merchant_unknown" in {r.code for r in out.evaluation.reasons}  # type: ignore[union-attr]
 
 
+@pytest.mark.req("RF-admin")
 def test_disabled_merchant_is_unsupported() -> None:
     out = run_pipeline(PipelineRequest(make_pdf(PINGO_LINES), "application/pdf"), deps(enabled=False))
     assert out.status == ReceiptStatus.UNSUPPORTED_MERCHANT
 
 
+@pytest.mark.req("RF-05")
 def test_blank_image_is_unreadable() -> None:
     out = run_pipeline(PipelineRequest(make_png(), "image/png"), deps(ocr=FakeOcr([])))
     assert out.status == ReceiptStatus.UNREADABLE
