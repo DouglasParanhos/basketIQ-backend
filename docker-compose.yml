@@ -1,0 +1,115 @@
+# Local development stack. Synthetic data and mocked providers only (spec técnica §12).
+name: basketiq
+
+x-backend-env: &backend-env
+  BASKETIQ_ENV: local
+  BASKETIQ_DATABASE_URL: postgresql+psycopg://basketiq:basketiq@postgres:5432/basketiq
+  BASKETIQ_REDIS_URL: redis://redis:6379/0
+  BASKETIQ_S3_ENDPOINT_URL: http://storage:8333
+  BASKETIQ_S3_PUBLIC_ENDPOINT_URL: http://localhost:9000
+  BASKETIQ_S3_ACCESS_KEY: basketiq
+  BASKETIQ_S3_SECRET_KEY: basketiq-secret
+  BASKETIQ_S3_BUCKET: basketiq-originals
+  # Mock OIDC locally; set the Google values in .env to use real Google sign-in.
+  BASKETIQ_OIDC_ISSUER: ${BASKETIQ_OIDC_ISSUER:-http://mock-oauth2:8080/default}
+  BASKETIQ_OIDC_INTERNAL_BASE_URL: ${BASKETIQ_OIDC_INTERNAL_BASE_URL:-http://mock-oauth2:8080}
+  BASKETIQ_OIDC_BROWSER_BASE_URL: ${BASKETIQ_OIDC_BROWSER_BASE_URL:-http://localhost:8080}
+  BASKETIQ_OIDC_CLIENT_ID: ${BASKETIQ_OIDC_CLIENT_ID:-basketiq-local}
+  BASKETIQ_OIDC_CLIENT_SECRET: ${BASKETIQ_OIDC_CLIENT_SECRET:-basketiq-local-secret}
+  BASKETIQ_OIDC_REDIRECT_URI: http://localhost:5173/v1/auth/callback
+  BASKETIQ_FRONTEND_BASE_URL: http://localhost:5173
+  BASKETIQ_ADMIN_EMAILS: ${BASKETIQ_ADMIN_EMAILS:-admin@basketiq.local}
+  BASKETIQ_LLM_ENABLED: ${BASKETIQ_LLM_ENABLED:-false}
+  BASKETIQ_OLLAMA_HOST: http://ollama:11434
+  BASKETIQ_EXTERNAL_FALLBACK: ${BASKETIQ_EXTERNAL_FALLBACK:-disabled}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: basketiq
+      POSTGRES_PASSWORD: basketiq
+      POSTGRES_DB: basketiq
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U basketiq"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 20
+
+  # S3-compatible object storage (SeaweedFS; MinIO no longer publishes images).
+  storage:
+    image: chrislusf/seaweedfs:4.48
+    command: >-
+      server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+      -s3.allowedOrigins=http://localhost:5173 -master.volumeSizeLimitMB=256
+    ports: ["9000:8333"]
+    volumes:
+      - storagedata:/data
+      - ./docker/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/healthz || exit 1"]
+      interval: 5s
+      retries: 30
+
+  mock-oauth2:
+    image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+    environment:
+      SERVER_PORT: 8080
+      JSON_CONFIG_PATH: /config/mock-oauth2.json
+    volumes: [./docker/mock-oauth2.json:/config/mock-oauth2.json:ro]
+    ports: ["8080:8080"]
+
+  migrate:
+    build: {context: ., target: api}
+    environment: *backend-env
+    command: ["python", "-m", "basketiq.cli", "migrate-and-init"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      storage: {condition: service_healthy}
+
+  api:
+    build: {context: ., target: api}
+    environment: *backend-env
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 5s
+      retries: 20
+
+  worker:
+    build: {context: ., target: worker}
+    environment: *backend-env
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  scheduler:
+    build: {context: ., target: api}
+    environment: *backend-env
+    command: ["python", "-m", "basketiq.workers.scheduler"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  ollama:
+    image: ollama/ollama:0.6.8
+    profiles: ["llm"]
+    ports: ["11434:11434"]
+    volumes: [ollamadata:/root/.ollama]
+
+volumes:
+  pgdata:
+  storagedata:
+  ollamadata:

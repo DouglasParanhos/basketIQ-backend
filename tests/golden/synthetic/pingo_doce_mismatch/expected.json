@@ -1,0 +1,54 @@
+{
+  "merchant": "PINGO_DOCE",
+  "route": "PDF_TEXT",
+  "purchase_at": "2026-09-03T18:42:00+01:00",
+  "total_cents": 1897,
+  "subtotal_cents": 1654,
+  "tax_cents": 163,
+  "status": "REVIEW_REQUIRED",
+  "lines": [
+    {
+      "raw_description": "ARROZ CAROLINO PD 1KG",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 149,
+      "line_total_cents": 149,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "AZEITE VIRGEM EXTRA 750ML",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 699,
+      "line_total_cents": 699,
+      "discount_cents": 140
+    },
+    {
+      "raw_description": "PEITO FRANGO",
+      "quantity": "0.742",
+      "unit": "kg",
+      "unit_price_cents": 599,
+      "line_total_cents": 444,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "AGUA COM GAS 6X33CL",
+      "quantity": "2",
+      "unit": "un",
+      "unit_price_cents": 229,
+      "line_total_cents": 458,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "BANANA DA MADEIRA",
+      "quantity": "1.038",
+      "unit": "kg",
+      "unit_price_cents": 199,
+      "line_total_cents": 207,
+      "discount_cents": 0
+    }
+  ],
+  "review_codes": [
+    "totals_mismatch"
+  ]
+}

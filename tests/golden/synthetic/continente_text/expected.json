@@ -1,0 +1,27 @@
+{
+  "merchant": "CONTINENTE",
+  "route": "PDF_TEXT",
+  "purchase_at": "2026-09-20T11:05:00+01:00",
+  "total_cents": 547,
+  "status": "REVIEW_REQUIRED",
+  "review_codes": [
+    "low_confidence"
+  ],
+  "lines": [
+    {
+      "raw_description": "LEITE MEIO GORDO",
+      "line_total_cents": 89
+    },
+    {
+      "raw_description": "PAO DE FORMA",
+      "line_total_cents": 159
+    },
+    {
+      "raw_description": "MACAS GALA",
+      "quantity": "1.20",
+      "unit": "kg",
+      "unit_price_cents": 249,
+      "line_total_cents": 299
+    }
+  ]
+}

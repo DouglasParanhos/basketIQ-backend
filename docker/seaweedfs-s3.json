@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "basketiq",
+      "credentials": [{"accessKey": "basketiq", "secretKey": "basketiq-secret"}],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "interactiveLogin": true,
+  "httpServer": "NettyWrapper",
+  "tokenCallbacks": [
+    {
+      "issuerId": "default",
+      "tokenExpiry": 300,
+      "requestMappings": [
+        {
+          "requestParam": "grant_type",
+          "match": "*",
+          "claims": {
+            "sub": "${sub}",
+            "aud": ["basketiq-local"],
+            "email": "${sub}@basketiq.local",
+            "email_verified": true,
+            "name": "Utilizador ${sub}"
+          }
+        }
+      ]
+    }
+  ]
+}

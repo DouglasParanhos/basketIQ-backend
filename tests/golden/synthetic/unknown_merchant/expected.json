@@ -1,0 +1,8 @@
+{
+  "merchant": "UNKNOWN",
+  "route": "PDF_TEXT",
+  "status": "REVIEW_REQUIRED",
+  "review_codes": [
+    "merchant_unknown"
+  ]
+}

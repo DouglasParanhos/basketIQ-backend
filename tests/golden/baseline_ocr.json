@@ -1,0 +1,56 @@
+{
+  "per_merchant": {
+    "CONTINENTE": {
+      "documents": 1,
+      "merchant_accuracy": 1.0,
+      "date_accuracy": 1.0,
+      "total_accuracy": 1.0,
+      "status_accuracy": 1.0,
+      "route_accuracy": 1.0,
+      "line_recall": 1.0,
+      "line_precision": 1.0,
+      "field_accuracy": 1.0,
+      "price_mae_cents": 0.0,
+      "review_flag_accuracy": 1.0
+    },
+    "LIDL": {
+      "documents": 2,
+      "merchant_accuracy": 1.0,
+      "date_accuracy": 1.0,
+      "total_accuracy": 1.0,
+      "status_accuracy": 1.0,
+      "route_accuracy": 1.0,
+      "line_recall": 1.0,
+      "line_precision": 1.0,
+      "field_accuracy": 1.0,
+      "price_mae_cents": 0.0,
+      "review_flag_accuracy": null
+    },
+    "PINGO_DOCE": {
+      "documents": 3,
+      "merchant_accuracy": 1.0,
+      "date_accuracy": 1.0,
+      "total_accuracy": 1.0,
+      "status_accuracy": 1.0,
+      "route_accuracy": 1.0,
+      "line_recall": 1.0,
+      "line_precision": 1.0,
+      "field_accuracy": 1.0,
+      "price_mae_cents": 0.0,
+      "review_flag_accuracy": 1.0
+    },
+    "UNKNOWN": {
+      "documents": 1,
+      "merchant_accuracy": 1.0,
+      "date_accuracy": null,
+      "total_accuracy": null,
+      "status_accuracy": 1.0,
+      "route_accuracy": 1.0,
+      "line_recall": null,
+      "line_precision": null,
+      "field_accuracy": null,
+      "price_mae_cents": null,
+      "review_flag_accuracy": 1.0
+    }
+  }
+}
