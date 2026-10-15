@@ -18,6 +18,7 @@ from basketiq.config import Settings
 from basketiq.db.models import User, UserSession
 
 ALGORITHM = "HS256"
+CLOCK_LEEWAY_SECONDS = 30
 log = logging.getLogger(__name__)
 
 
@@ -54,8 +55,13 @@ def issue_access_token(settings: Settings, user: User, session_id: uuid.UUID) ->
 
 def decode_access_token(settings: Settings, token: str) -> dict[str, Any]:
     try:
+        # Leeway absorbs small clock steps between API instances (also seen on WSL2 hosts).
         claims = jwt.decode(
-            token, settings.jwt_secret, algorithms=[ALGORITHM], options={"require": ["exp", "sub", "sid"]}
+            token,
+            settings.jwt_secret,
+            algorithms=[ALGORITHM],
+            options={"require": ["exp", "sub", "sid"]},
+            leeway=CLOCK_LEEWAY_SECONDS,
         )
     except jwt.ExpiredSignatureError as exc:
         raise SessionError("token_expired") from exc

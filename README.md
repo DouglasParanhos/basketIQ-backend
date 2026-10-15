@@ -58,8 +58,9 @@ curl localhost:8000/healthz  # API on :8000, OpenAPI docs on :8000/docs (local o
 ```
 
 Then start the frontend (`../Frontend`, `pnpm dev`) and open http://localhost:5173. The local
-sign-in uses the mock OIDC server: type any user name (e.g. `admin` → `admin@basketiq.local`, which
-has the operator role by default).
+sign-in uses the mock OIDC server: type any user name; the account e-mail becomes
+`<name>@basketiq.local` (local/test only). `admin` → `admin@basketiq.local` has the operator role by
+default (`BASKETIQ_ADMIN_EMAILS`).
 
 ### Real Google sign-in
 
@@ -75,6 +76,8 @@ non-secure cookies.
 
 `make up-llm` starts Ollama (`qwen2.5:3b-instruct`) and enables ambiguity resolution. Proposals are
 accepted only when every value appears verbatim in the receipt line and quantity × price matches.
+`pytest -m llm` runs the real Agno → Ollama round trip (verified with qwen2.5:3b: a payment line is
+rejected as a product; a product line is accepted only with evidence).
 
 ## Tests
 

@@ -186,7 +186,7 @@ def test_expired_and_tampered_tokens(client: TestClient, login: Any) -> None:
     client.cookies.set("biq_at", good[:-2] + ("AA" if not good.endswith("AA") else "BB"))
     assert client.get("/v1/me").json()["code"] == "invalid_token"
     claims = jwt.decode(good, options={"verify_signature": False})
-    claims["exp"] = int(time.time()) - 10
+    claims["exp"] = int(time.time()) - 60  # beyond the 30 s clock leeway
     client.cookies.set("biq_at", jwt.encode(claims, get_settings().jwt_secret, algorithm="HS256"))
     assert client.get("/v1/me").json()["code"] == "token_expired"
 
@@ -205,6 +205,12 @@ def test_login_is_rate_limited(client: TestClient, idp: FakeIdP) -> None:
     assert 429 in statuses
     body = client.get("/v1/auth/login", follow_redirects=False).json()
     assert body["code"] == "rate_limited" and body["request_id"]
+
+
+def test_local_mock_without_email_gets_a_stable_derived_email(client: TestClient, idp: FakeIdP) -> None:
+    idp.next_claims = {"email": None, "name": None, "sub": "maria"}
+    sign_in(client, idp)
+    assert client.get("/v1/me").json()["email"] == "maria@basketiq.local"
 
 
 @pytest.mark.req("RF-admin")

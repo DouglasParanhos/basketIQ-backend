@@ -101,6 +101,27 @@ def test_ambiguous_line_goes_to_local_llm_and_is_validated() -> None:
 
 
 @pytest.mark.req("F-29")
+def test_llm_quantity_with_multiplication_sign_is_verified() -> None:
+    # Observed with qwen2.5:3b on Ollama: quantity returned as "2 X".
+    from basketiq.pipeline.llm import apply_proposals
+    from basketiq.pipeline.schema import ParsedLine
+
+    text = "?? QUEIJO FLAMENGO FATIAS 2 X 1,49 2,98"
+    line = ParsedLine(raw_description=text, evidence=[text], unresolved=True)
+    proposal = LlmLineProposal(
+        line_index=0,
+        description="QUEIJO FLAMENGO FATIAS",
+        quantity="2 X",
+        unit_price="1,49",
+        line_total="2,98",
+        is_product=True,
+    )
+    apply_proposals([line], [0], LlmProposals(lines=[proposal]))
+    assert (line.quantity, line.unit, line.unit_price_cents, line.line_total_cents) == (2, "un", 149, 298)
+    assert not line.unresolved and line.field_confidence["quantity"] == 0.85
+
+
+@pytest.mark.req("F-29")
 @pytest.mark.req("PT-6")
 def test_llm_values_without_evidence_are_rejected() -> None:
     lines = ["Artigos", "C PAO 1,00", "XPTO ?? 2,50", "Resumo", "TOTAL A PAGAR 3,50", "2026-09-01 10:00"]

@@ -70,7 +70,7 @@ def test_download_urls_expire_and_cannot_be_tampered(s3: S3Storage) -> None:
     url = s3.presign_download(key, 1, "application/pdf")
     assert httpx.get(url).status_code == 200
     assert httpx.get(url.replace("/original", "/other")).status_code == 403
-    time.sleep(3)
+    time.sleep(8)  # SeaweedFS tolerates a few seconds of clock skew after X-Amz-Expires
     assert httpx.get(url).status_code == 403
     # No public listing.
     assert httpx.get(f"{ENDPOINT}/{s3.bucket}").status_code == 403

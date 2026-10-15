@@ -142,5 +142,9 @@ class OidcClient:
         if issuer == GOOGLE_ISSUER and not claims.get("email_verified"):
             raise OidcError("email_not_verified")
         if not claims.get("email"):
-            raise OidcError("email_missing")
+            if not (self.settings.is_local and issuer != GOOGLE_ISSUER):
+                raise OidcError("email_missing")
+            # Local mock OIDC: the login form only asks for a subject, so derive a stable e-mail.
+            claims["email"] = f"{claims['sub']}@basketiq.local"
+            claims.setdefault("name", str(claims["sub"]))
         return dict(claims)

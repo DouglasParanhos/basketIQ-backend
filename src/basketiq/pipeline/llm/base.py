@@ -106,10 +106,12 @@ def _verified_amount(value: str | None, evidence: str) -> int | None:
 def _verified_quantity(value: str | None, evidence: str) -> Decimal | None:
     if value is None:
         return None
+    # Models often copy the multiplication sign with the number ("2 X"); the number is what counts.
+    value = re.sub(r"\s*[xX×]\s*$", "", value.strip())
     qty = parse_decimal(value)
     if qty is None or qty <= 0:
         return None
-    return qty if re.search(rf"(?<![\d,.]){re.escape(value.strip())}(?![\d,])", evidence) else None
+    return qty if re.search(rf"(?<![\d,.]){re.escape(value)}(?![\d,])", evidence) else None
 
 
 def _in_evidence(description: str, evidence: str) -> bool:
