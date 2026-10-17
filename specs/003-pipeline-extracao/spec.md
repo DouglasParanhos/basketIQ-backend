@@ -96,12 +96,16 @@ Sem ambiguidades, não há chamada de LLM nem de serviço externo.
 
 **Acceptance Scenarios**:
 
-1. **Given** uma linha ambígua e LLM local ativo, **When** o pipeline corre, **Then** só essa linha é
+1. **Given** uma linha ambígua e `LLM_ENABLED: true` em `config/app-config.yaml`, **When** o pipeline corre, **Then** só essa linha é
    enviada (Agno + Ollama), a resposta segue o schema e só valores presentes na linha são aceites;
    campos sem evidência ficam `null`. — F-29, PT-6 ·
    `tests/unit/test_pipeline_routes.py::test_ambiguous_line_goes_to_local_llm_and_is_validated`,
    `tests/unit/test_pipeline_routes.py::test_llm_values_without_evidence_are_rejected`,
    `tests/unit/test_pipeline_routes.py::test_llm_unavailable_falls_back_to_review`
+   Com `LLM_ENABLED: false` (valor por omissão) o agente não existe e nenhuma linha vai para o LLM
+   (ver `specs/008-configuracao`). — CFG-03 ·
+   `tests/unit/test_app_config.py::test_llm_flag_controls_whether_the_agent_exists`,
+   `tests/unit/test_app_config.py::test_worker_components_follow_the_flag`
 2. **Given** OCR local insuficiente, fallback ativo e orçamento disponível, **When** o pipeline corre,
    **Then** o fornecedor externo é chamado e são registados fornecedor, motivo e custo.
    — F-30 · `tests/unit/test_pipeline_routes.py::test_external_called_only_when_local_ocr_is_insufficient_and_allowed`,

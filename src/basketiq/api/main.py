@@ -12,6 +12,8 @@ from sqlalchemy import text
 from basketiq.api.errors import install_error_handlers
 from basketiq.api.ratelimit import limiter
 from basketiq.api.routers import admin, analytics, auth, me, receipts
+from basketiq.api.routers import config as config_router
+from basketiq.app_config import get_app_config
 from basketiq.config import get_settings
 from basketiq.db.session import get_engine
 from basketiq.observability import metrics
@@ -23,6 +25,7 @@ log = get_logger("basketiq.api")
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
+    get_app_config()  # fail fast if config/app-config.yaml is missing or invalid
     app = FastAPI(
         title="BasketIQ API",
         version="0.1.0",
@@ -63,7 +66,7 @@ def create_app() -> FastAPI:
             log.info("request", method=request.method, route=path, status=status, ms=round(elapsed * 1000))
             request_id_var.reset(token)
 
-    for module in (auth, me, receipts, analytics, admin):
+    for module in (config_router, auth, me, receipts, analytics, admin):
         app.include_router(module.router)
 
     @app.get("/healthz", include_in_schema=False)

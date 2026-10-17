@@ -6,6 +6,46 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/v1/config": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Customer-facing configuration (no sign-in needed)",
+        "operationId": "public_config_v1_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicConfigOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/config/manifest.webmanifest": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Web app manifest with the configured product name",
+        "operationId": "manifest_v1_config_manifest_webmanifest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/login": {
       "get": {
         "tags": [
@@ -1679,6 +1719,37 @@
         }
       }
     },
+    "/v1/admin/config": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Values loaded from config/app-config.yaml",
+        "operationId": "product_config_v1_admin_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductConfigOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/merchants": {
       "get": {
         "tags": [
@@ -3194,6 +3265,25 @@
         ],
         "title": "ProductAnalyticsOut"
       },
+      "ProductConfigOut": {
+        "properties": {
+          "app_name_for_customer": {
+            "type": "string",
+            "title": "App Name For Customer"
+          },
+          "llm_enabled": {
+            "type": "boolean",
+            "title": "Llm Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "app_name_for_customer",
+          "llm_enabled"
+        ],
+        "title": "ProductConfigOut",
+        "description": "Read-only view of config/app-config.yaml (one field per key in the file)."
+      },
       "ProductInfo": {
         "properties": {
           "id": {
@@ -3334,6 +3424,19 @@
           "last_purchase_at"
         ],
         "title": "ProductSearchItem"
+      },
+      "PublicConfigOut": {
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "title": "App Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "app_name"
+        ],
+        "title": "PublicConfigOut"
       },
       "ReceiptOut": {
         "properties": {

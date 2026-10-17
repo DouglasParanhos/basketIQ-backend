@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from basketiq.api.deps import AdminUser, Db, SettingsDep, csrf_protect
 from basketiq.api.errors import ApiError, ErrorBody
+from basketiq.api.routers.config import AppConfigDep
 from basketiq.db.models import ProcessingJob, Receipt
 from basketiq.domain.status import PROCESSABLE_STATUSES, SUPPORTED_MERCHANTS, ActorType, JobStatus, Merchant
 from basketiq.queue import JobQueue, get_queue
@@ -49,6 +50,13 @@ class MerchantConfigOut(BaseModel):
     field_thresholds: dict[str, float]
     reconciliation_tolerance_cents: int
     updated_at: datetime | None
+
+
+class ProductConfigOut(BaseModel):
+    """Read-only view of config/app-config.yaml (one field per key in the file)."""
+
+    app_name_for_customer: str
+    llm_enabled: bool
 
 
 class MerchantConfigIn(BaseModel):
@@ -110,6 +118,13 @@ def product_metrics(
     date_to: Annotated[date, Query(alias="to")],
 ) -> dict[str, Any]:
     return admin.metrics(db, date_from, date_to, settings.timezone)
+
+
+@router.get("/config", response_model=ProductConfigOut, summary="Values loaded from config/app-config.yaml")
+def product_config(_: AdminUser, config: AppConfigDep) -> ProductConfigOut:
+    return ProductConfigOut(
+        app_name_for_customer=config.app_name_for_customer, llm_enabled=config.llm_enabled
+    )
 
 
 @router.get("/merchants", response_model=list[MerchantConfigOut])

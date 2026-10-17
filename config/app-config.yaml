@@ -1,0 +1,16 @@
+# Product decisions and feature flags. Single source of truth for these values: the API and the
+# worker read this file at start-up and refuse to start if it is missing or invalid.
+# Edit it, then restart the API and the worker (the file is mounted into the containers).
+#
+# Secrets, connection strings and per-environment infrastructure settings stay in environment
+# variables (BASKETIQ_*, see .env.example); they do not belong here.
+
+# Product name shown to customers: login screen, page title, installed-app name (PWA manifest).
+# 1 to 40 characters. The repositories and technical documents keep the project name, BasketIQ.
+APP_NAME_FOR_CUSTOMER: Super Mercado
+
+# Local LLM agent (Agno + Ollama) that proposes values for receipt lines the deterministic parser
+# could not read. Every value it proposes is still checked against the receipt text.
+# true needs the Ollama service (make up-llm); false never calls a LLM.
+# The external OCR/AI fallback is configured separately (BASKETIQ_EXTERNAL_FALLBACK).
+LLM_ENABLED: false

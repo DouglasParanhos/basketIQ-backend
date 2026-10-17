@@ -8,17 +8,17 @@ from functools import lru_cache
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
 
+from basketiq.app_config import get_app_config
 from basketiq.config import get_settings
 from basketiq.db.session import get_sessionmaker
 from basketiq.observability.logging import configure_logging
-from basketiq.pipeline.external import build_external
-from basketiq.pipeline.llm import build_resolver
-from basketiq.pipeline.ocr import build_ocr_engine
 from basketiq.queue import ACTOR_NAME, QUEUE_NAME, get_queue
 from basketiq.services.processing import Components, process_job
 from basketiq.storage import get_storage
+from basketiq.workers.components import build_components
 
 settings = get_settings()
+app_config = get_app_config()  # fails fast if config/app-config.yaml is missing or invalid
 configure_logging(settings.log_level)
 broker = RedisBroker(url=settings.redis_url)
 dramatiq.set_broker(broker)
@@ -26,12 +26,8 @@ dramatiq.set_broker(broker)
 
 @lru_cache
 def components() -> Components:
-    # Built once per worker process: PaddleOCR models load lazily on first use.
-    return Components(
-        ocr=build_ocr_engine(settings),
-        resolver=build_resolver(settings),
-        external=build_external(settings.external_fallback),
-    )
+    # Built once per worker process.
+    return build_components(settings, app_config)
 
 
 # Retries are handled by our own bookkeeping in PostgreSQL (attempt_count, backoff, sweeper).

@@ -19,6 +19,7 @@ FROM base AS api
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
 COPY alembic.ini ./
 COPY alembic ./alembic
+COPY config ./config
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 USER app
@@ -31,6 +32,7 @@ ENV PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --extra ocr --extra llm --no-install-project
 COPY alembic.ini ./
 COPY alembic ./alembic
+COPY config ./config
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --extra ocr --extra llm
 USER app

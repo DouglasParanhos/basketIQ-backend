@@ -10,9 +10,10 @@ install:            ## install all dependencies (OCR + LLM extras, dev tools)
 up:                 ## full local stack (API, worker, scheduler, Postgres, Redis, storage, mock OIDC)
 	docker compose up -d --build
 
-up-llm:             ## same plus Ollama for ambiguity resolution
-	BASKETIQ_LLM_ENABLED=true docker compose --profile llm up -d --build
+up-llm:             ## full stack plus Ollama; also set LLM_ENABLED: true in config/app-config.yaml
+	docker compose --profile llm up -d --build
 	docker compose exec ollama ollama pull qwen2.5:3b-instruct
+	@grep -Eq '^LLM_ENABLED: true' config/app-config.yaml || echo "WARNING: LLM_ENABLED is not true in config/app-config.yaml; the LLM agent stays off. Edit it and run: docker compose restart api worker"
 
 down:
 	docker compose down

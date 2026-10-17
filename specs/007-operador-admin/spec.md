@@ -46,6 +46,9 @@ falharam — sem acesso ao conteúdo das notas.
    `tests/unit/test_pipeline_routes.py::test_disabled_merchant_is_unsupported`
 3. **Given** um e-mail configurado como operador, **When** entra, **Then** recebe o papel `admin`.
    — RF-admin · `tests/api/test_auth.py::test_admin_role_from_configuration`
+4. **Given** o ficheiro `config/app-config.yaml`, **When** o operador abre "Configuração", **Then** vê o
+   valor carregado de cada chave (só leitura); um utilizador comum recebe 403. — CFG-02 ·
+   `tests/api/test_config.py::test_admin_config_shows_every_key_to_operators_only`
 
 ### Edge Cases
 

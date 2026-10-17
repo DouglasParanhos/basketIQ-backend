@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     ocr_engine: Literal["paddle", "none"] = "paddle"
     ocr_det_model: str = "PP-OCRv5_mobile_det"
     ocr_rec_model: str = "latin_PP-OCRv5_mobile_rec"
-    llm_enabled: bool = False
+    # Whether the LLM agent runs is LLM_ENABLED in config/app-config.yaml, not an env var.
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:3b-instruct"
     llm_timeout_seconds: float = 30.0

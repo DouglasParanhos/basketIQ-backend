@@ -19,7 +19,7 @@ x-backend-env: &backend-env
   BASKETIQ_OIDC_REDIRECT_URI: http://localhost:5173/v1/auth/callback
   BASKETIQ_FRONTEND_BASE_URL: http://localhost:5173
   BASKETIQ_ADMIN_EMAILS: ${BASKETIQ_ADMIN_EMAILS:-admin@basketiq.local}
-  BASKETIQ_LLM_ENABLED: ${BASKETIQ_LLM_ENABLED:-false}
+  # Whether the LLM agent runs (LLM_ENABLED) and the product name are in config/app-config.yaml.
   BASKETIQ_OLLAMA_HOST: http://ollama:11434
   BASKETIQ_EXTERNAL_FALLBACK: ${BASKETIQ_EXTERNAL_FALLBACK:-disabled}
 
@@ -80,6 +80,7 @@ services:
     build: {context: ., target: api}
     environment: *backend-env
     ports: ["8000:8000"]
+    volumes: [./config:/app/config:ro]
     depends_on:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -91,6 +92,7 @@ services:
   worker:
     build: {context: ., target: worker}
     environment: *backend-env
+    volumes: [./config:/app/config:ro]
     depends_on:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

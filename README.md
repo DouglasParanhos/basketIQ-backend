@@ -74,7 +74,9 @@ non-secure cookies.
 
 ### Optional local LLM
 
-`make up-llm` starts Ollama (`qwen2.5:3b-instruct`) and enables ambiguity resolution. Proposals are
+Off by default. To use it: set `LLM_ENABLED: true` in `config/app-config.yaml`, run `make up-llm`
+(starts Ollama and pulls `qwen2.5:3b-instruct`) and restart the API and worker
+(`docker compose restart api worker`). Proposals are
 accepted only when every value appears verbatim in the receipt line and quantity × price matches.
 `pytest -m llm` runs the real Agno → Ollama round trip (verified with qwen2.5:3b: a payment line is
 rejected as a product; a product line is accepted only with evidence).
@@ -96,7 +98,29 @@ Performance check: `make bench LINES=5000` (and `LINES=50000`).
 
 ## Configuration
 
-All settings are environment variables prefixed `BASKETIQ_` (see `src/basketiq/config.py`).
+### Product configuration file: `config/app-config.yaml`
+
+Product decisions and feature flags live in one file, the only source of these values:
+
+| Key | Value | Effect |
+|---|---|---|
+| `APP_NAME_FOR_CUSTOMER` | `Super Mercado` | Name customers see: login, page title, settings, installed-app name. 1–40 characters. |
+| `LLM_ENABLED` | `false` | Local LLM agent (Agno + Ollama) for receipt lines the parser could not read. |
+
+- Every key is required and has no default in code. Unknown keys, wrong types (`LLM_ENABLED` must be a
+  real boolean), an empty or over-long name, or a missing file stop the API and the worker at start-up.
+- Changing a value means editing the file and restarting the API and worker. The file is mounted into the
+  containers (`./config:/app/config:ro`) and copied into the images.
+- The old `BASKETIQ_LLM_ENABLED` variable is rejected at start-up so it cannot be silently ignored.
+- `BASKETIQ_APP_CONFIG_FILE` only changes the file's **path** (tests, deployments).
+- The Frontend reads the name at runtime from `GET /v1/config` (public) and the installed-app manifest from
+  `GET /v1/config/manifest.webmanifest`; operators see every value in `GET /v1/admin/config`. The public
+  endpoint exposes the name only, never the flags.
+- The repositories, packages, `BASKETIQ_*` variables and technical documents keep the project name, BasketIQ.
+
+### Environment variables (infrastructure, secrets, tuning)
+
+All other settings are environment variables prefixed `BASKETIQ_` (see `src/basketiq/config.py`).
 Notable: `CONFIDENCE_THRESHOLD` (0.80), `RECONCILIATION_TOLERANCE_CENTS` (2), `RETENTION_DAYS` (30),
-`EXTERNAL_FALLBACK` (`disabled`|`mock`), `EXTERNAL_MONTHLY_BUDGET_CENTS` (0), `LLM_ENABLED`.
+`EXTERNAL_FALLBACK` (`disabled`|`mock`), `EXTERNAL_MONTHLY_BUDGET_CENTS` (0).
 Per-merchant thresholds/tolerance and enabling are managed by operators via `/v1/admin/merchants`.
