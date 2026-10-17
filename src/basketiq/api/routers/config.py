@@ -27,8 +27,8 @@ MANIFEST_STATIC: dict[str, Any] = {
     "scope": "/",
     "display": "standalone",
     "orientation": "portrait",
-    "background_color": "#EEF2F7",
-    "theme_color": "#1D4E9E",
+    "background_color": "#F1F8F5",
+    "theme_color": "#075B50",
     "icons": [
         {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
         {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
