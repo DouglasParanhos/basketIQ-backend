@@ -2,11 +2,8 @@
   "merchant": "CONTINENTE",
   "route": "PDF_TEXT",
   "purchase_at": "2026-09-20T11:05:00+01:00",
-  "total_cents": 547,
-  "status": "REVIEW_REQUIRED",
-  "review_codes": [
-    "low_confidence"
-  ],
+  "total_cents": 844,
+  "status": "COMPLETED",
   "lines": [
     {
       "raw_description": "LEITE MEIO GORDO",
@@ -15,6 +12,14 @@
     {
       "raw_description": "PAO DE FORMA",
       "line_total_cents": 159
+    },
+    {
+      "raw_description": "IOGURTE NATURAL 4X125G",
+      "quantity": "3",
+      "unit": "un",
+      "unit_price_cents": 119,
+      "line_total_cents": 357,
+      "discount_cents": 60
     },
     {
       "raw_description": "MACAS GALA",

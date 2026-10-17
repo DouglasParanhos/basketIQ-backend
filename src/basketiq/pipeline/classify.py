@@ -32,6 +32,7 @@ _SIGNALS: dict[Merchant, list[tuple[re.Pattern[str], float, bool]]] = {
         (re.compile(r"\bCONTINENTE\b"), 0.9, True),
         (re.compile(r"MODELO\s+CONTINENTE"), 0.95, False),
         (re.compile(r"CARTAO\s+CONTINENTE"), 0.6, False),
+        (re.compile(r"502\s?011\s?475"), 0.95, False),  # NIF of Modelo Continente printed on the receipt
     ],
     Merchant.AUCHAN: [
         (re.compile(r"\bAUCHAN\b"), 0.9, True),

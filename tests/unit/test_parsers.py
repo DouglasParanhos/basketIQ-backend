@@ -91,10 +91,60 @@ def test_lidl_quantity_and_discount_lines() -> None:
     assert parsed.purchase_at == datetime(2026, 9, 12, 10, 15, tzinfo=LISBON)
 
 
+CONTINENTE_LINES = [
+    "Modelo Continente Hipermercados, SA",
+    "Nro:FS CNP203/131123 09/10/2026 15:16",
+    "IVA DESCRICAO VALOR",
+    "Higiene:",
+    "(C) DEO SP NIVEA MEN BLACK&WHI 150",
+    "2 X 2,99 5,98",
+    "POUPANCA 4,00",
+    "Charcutaria&Queijos:",
+    "(A) QJ CABRA FATIAS CONTINENTE 150G 2,19",
+    "SUBTOTAL 8,17",
+    "Desconto Cartao Utilizado 5,00",
+    "TOTAL A PAGAR 3,17",
+    "Total de descontos e poupancas 4,00",
+    "%IVA Total Liq. IVA Total",
+    "(A) 6,00% 1,30 0,08 1,38",
+    "26-10-09 15:16:45 Per051 Tr088 Msg138",
+]
+
+
+@pytest.mark.req("RF-06")
+def test_continente_multiline_item_savings_and_card_discount() -> None:
+    parsed = parser_for(Merchant.CONTINENTE).parse(doc_from_lines(CONTINENTE_LINES))
+    deo, cheese = parsed.lines
+    assert deo.raw_description == "DEO SP NIVEA MEN BLACK&WHI 150"
+    # The printed price is already net of "POUPANCA": the saving is added back as discount.
+    assert (deo.quantity, deo.unit, deo.unit_price_cents, deo.line_total_cents, deo.discount_cents) == (
+        Decimal(2),
+        "un",
+        499,
+        998,
+        400,
+    )
+    assert (cheese.quantity, cheese.line_total_cents, cheese.discount_cents) == (Decimal(1), 219, 0)
+    assert parsed.total_cents == 817  # SUBTOTAL, not "TOTAL A PAGAR" (depends on card balance used)
+    assert parsed.total_discount_cents == 400
+    assert parsed.subtotal_cents is None and parsed.tax_cents is None  # VAT table skewed by card discount
+    assert "card_discount_ignored" in parsed.notes
+    assert parsed.receipt_ref == "FS CNP203/131123"
+    assert parsed.purchase_at == datetime(2026, 10, 9, 15, 16, tzinfo=LISBON)
+
+
+@pytest.mark.req("RF-06")
+def test_continente_quantity_line_without_description_is_kept_unresolved() -> None:
+    parsed = parser_for(Merchant.CONTINENTE).parse(
+        doc_from_lines(["IVA DESCRICAO VALOR", "3 X 2,69 8,07", "SUBTOTAL 8,07"])
+    )
+    assert len(parsed.lines) == 1 and parsed.lines[0].unresolved
+
+
 @pytest.mark.req("RF-06")
 def test_generic_parser_never_reaches_threshold() -> None:
-    parsed = parser_for(Merchant.CONTINENTE).parse(
-        doc_from_lines(["CONTINENTE", "LEITE 0,89", "TOTAL A PAGAR 0,89", "Data: 20/09/2026 11:05"])
+    parsed = parser_for(Merchant.AUCHAN).parse(
+        doc_from_lines(["AUCHAN", "LEITE 0,89", "TOTAL A PAGAR 0,89", "Data: 20/09/2026 11:05"])
     )
     assert parsed.lines and all(
         v <= CONFIDENCE_CAP for line in parsed.lines for v in line.field_confidence.values()
@@ -132,6 +182,7 @@ def test_purchase_time_is_lisbon_local_time_across_dst() -> None:
         (["Pingo Doce - Distribuição Alimentar", "NIPC: 500829993"], Merchant.PINGO_DOCE),
         (["LIDL & Cia - LISBOA", "NIF:503340855"], Merchant.LIDL),
         (["CONTINENTE", "MODELO CONTINENTE HIPERMERCADOS"], Merchant.CONTINENTE),
+        (["BD Defensores Chaves", "Registada CRC Porto sob nº 502011475"], Merchant.CONTINENTE),
         (["AUCHAN PORTUGAL", "auchan.pt"], Merchant.AUCHAN),
         (["MERCEARIA DO BAIRRO"], Merchant.UNKNOWN),
     ],

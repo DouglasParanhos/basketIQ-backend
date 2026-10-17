@@ -252,27 +252,47 @@ def main() -> None:
     }
     write_case("lidl_text", "document.pdf", lidl_expected, lambda p: write_text_pdf(p, lidl_lines))
 
-    # --- Continente (generic parser, never auto-confirmed) ----------------------------------
+    # --- Continente (layout of the real "Fatura Simplificada"; items are fictional) ---------
     cont_lines = [
-        "CONTINENTE",
-        "MODELO CONTINENTE HIPERMERCADOS SA",
-        "Data: 20/09/2026 11:05",
-        "LEITE MEIO GORDO 0,89",
-        "PAO DE FORMA 1,59",
-        "MACAS GALA 1,20 X 2,49 2,99",
-        "TOTAL A PAGAR 5,47",
-        "MULTIBANCO 5,47",
+        "Modelo Continente Hipermercados, SA",
+        "NIF: PT502011475",
+        "Fatura Simplificada Original",
+        "Nro:FS CNP203/100001 20/09/2026 11:05",
+        "NIF: Consumidor Final",
+        "IVA DESCRICAO VALOR",
+        "Mercearia:",
+        "(A) LEITE MEIO GORDO 0,89",
+        "(A) PAO DE FORMA 1,59",
+        "(A) IOGURTE NATURAL 4X125G",
+        "3 X 0,99 2,97",
+        "POUPANCA 0,60",
+        "Frutas:",
+        "(A) MACAS GALA",
+        "1,20 kg X 2,49 EUR/kg 2,99",
+        "SUBTOTAL 8,44",
+        "Desconto Cartao Utilizado 2,00",
+        "TOTAL A PAGAR 6,44",
+        "Total de descontos e poupancas 0,60",
+        "%IVA Total Liq. IVA Total",
+        "(A) 6,00% 4,06 0,24 4,30",
     ]
     cont_expected = {
         "merchant": "CONTINENTE",
         "route": "PDF_TEXT",
         "purchase_at": "2026-09-20T11:05:00+01:00",
-        "total_cents": 547,
-        "status": "REVIEW_REQUIRED",
-        "review_codes": ["low_confidence"],
+        "total_cents": 844,
+        "status": "COMPLETED",
         "lines": [
             {"raw_description": "LEITE MEIO GORDO", "line_total_cents": 89},
             {"raw_description": "PAO DE FORMA", "line_total_cents": 159},
+            {
+                "raw_description": "IOGURTE NATURAL 4X125G",
+                "quantity": "3",
+                "unit": "un",
+                "unit_price_cents": 119,
+                "line_total_cents": 357,
+                "discount_cents": 60,
+            },
             {
                 "raw_description": "MACAS GALA",
                 "quantity": "1.20",

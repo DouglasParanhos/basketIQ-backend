@@ -535,7 +535,7 @@ def test_privacy_consent_is_required_for_receipts(client: TestClient, login: Any
 
 @pytest.mark.req("RF-12")
 def test_list_pagination_and_filters(client: TestClient, user: Any, storage: Any, run_jobs: Any) -> None:
-    for name in ("pingo_doce_text", "lidl_text", "continente_text"):
+    for name in ("pingo_doce_text", "lidl_text", "unknown_merchant"):
         import_receipt(client, storage, run_jobs, synthetic(name))
     page1 = client.get("/v1/receipts?limit=2").json()
     assert len(page1["items"]) == 2 and page1["next_cursor"]
@@ -546,7 +546,7 @@ def test_list_pagination_and_filters(client: TestClient, user: Any, storage: Any
     lidl = client.get("/v1/receipts?merchant=LIDL").json()["items"]
     assert [i["merchant"] for i in lidl] == ["LIDL"]
     review = client.get("/v1/receipts?status=REVIEW_REQUIRED").json()["items"]
-    assert [i["merchant"] for i in review] == ["CONTINENTE"]
+    assert [i["merchant"] for i in review] == ["UNKNOWN"]
     assert client.get("/v1/receipts?cursor=garbage").status_code == 422
 
 
