@@ -27,7 +27,6 @@ and the VAT table is skewed by it too, so both are ignored (the VAT table only w
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
 from decimal import Decimal
 
 from basketiq.domain.money import multiply_cents, parse_money_cents
@@ -39,13 +38,15 @@ from basketiq.pipeline.parsers.base import (
     build_item,
     choose_purchase_datetime,
     find_amount,
+    index_of,
     parse_date_candidates,
     unresolved_line,
 )
 from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt, TextLine
 
-_NAME = re.compile(r"^\((?P<tax>[A-Z])\)\s+(?P<desc>.+)$")
-_ITEM = re.compile(rf"^\((?P<tax>[A-Z])\)\s+(?P<desc>.+?)\s+(?P<total>{MONEY})$")
+_TAX = r"^\((?P<tax>[A-Z])\)\s+"
+_NAME = re.compile(rf"{_TAX}(?P<desc>.+)$")
+_ITEM = re.compile(rf"{_TAX}(?P<desc>.+?)\s+(?P<total>{MONEY})$")
 _QTY = re.compile(
     rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?:kg)?\s*[Xx]\s*(?P<unit>{MONEY})(?:\s*(?:EUR|€)/kg)?"
     rf"\s+(?P<total>{MONEY})$",
@@ -69,22 +70,20 @@ class ContinenteParser:
 
     def parse(self, doc: DocumentText) -> ParsedReceipt:
         lines = doc.lines
-        start = _index_of(lines, lambda t: bool(_ITEMS_HEADER.match(t)))
-        end = _index_of(
-            lines,
-            lambda t: bool(_SUBTOTAL.match(t) or _TOTAL_PAY.match(t)),
-            start + 1 if start is not None else 0,
-        )
-        item_zone = lines[(start + 1 if start is not None else 0) : end if end is not None else len(lines)]
+        start = index_of(lines, lambda t: bool(_ITEMS_HEADER.match(t)))
+        first = start + 1 if start is not None else 0
+        end = index_of(lines, lambda t: bool(_SUBTOTAL.match(t) or _TOTAL_PAY.match(t)), first)
+        item_zone = lines[first:end]
         summary = lines[end:] if end is not None else []
 
         parsed: list[ParsedLine] = []
-        pending: TextLine | None = None  # "(C) DESCRIPTION": the price is on the next line
+        # "(C) DESCRIPTION": the price is on the next line
+        pending: tuple[TextLine, re.Match[str]] | None = None
 
         def flush_pending() -> None:
             nonlocal pending
             if pending is not None:
-                parsed.append(unresolved_line(pending))
+                parsed.append(unresolved_line(pending[0]))
                 pending = None
 
         for line in item_zone:
@@ -101,17 +100,16 @@ class ContinenteParser:
                 if pending is None:
                     parsed.append(unresolved_line(line))
                     continue
-                name = _NAME.match(pending.text.strip())
-                assert name is not None  # only name lines are stored as pending
+                name_line, pending_name = pending
                 parsed.append(
                     build_item(
-                        description=name.group("desc"),
+                        description=pending_name.group("desc"),
                         total_text=m.group("total"),
                         qty_text=m.group("qty"),
                         unit_price_text=m.group("unit"),
-                        tax_code=name.group("tax"),
-                        line_conf=min(line.confidence, pending.confidence),
-                        evidence=[pending.text.strip(), text],
+                        tax_code=pending_name.group("tax"),
+                        line_conf=min(line.confidence, name_line.confidence),
+                        evidence=[name_line.text.strip(), text],
                     )
                 )
                 pending = None
@@ -126,9 +124,9 @@ class ContinenteParser:
                         evidence=[text],
                     )
                 )
-            elif _NAME.match(text):
+            elif name := _NAME.match(text):
                 flush_pending()
-                pending = line
+                pending = (line, name)
             elif _SECTION.match(text):
                 flush_pending()
             elif re.search(MONEY, text):
@@ -190,22 +188,11 @@ def _apply_savings(item: ParsedLine, cents: int, conf: float, evidence: str) -> 
 def _vat_table(summary: list[TextLine], total: int | None) -> tuple[int | None, int | None]:
     """Sum the VAT table, but only when it ties out with the receipt total: after a card discount
     the printed table covers just the amount left to pay."""
-    base_total = tax_total = gross_total = rows = 0
-    for line in summary:
-        m = _VAT_ROW.match(line.text.strip())
-        if not m:
-            continue
-        base_total += parse_money_cents(m.group("base")) or 0
-        tax_total += parse_money_cents(m.group("tax")) or 0
-        gross_total += parse_money_cents(m.group("total")) or 0
-        rows += 1
-    if rows == 0 or gross_total != total:
+    rows = [m for line in summary if (m := _VAT_ROW.match(line.text.strip()))]
+
+    def column(name: str) -> int:
+        return sum(parse_money_cents(m.group(name)) or 0 for m in rows)
+
+    if not rows or column("total") != total:
         return None, None
-    return base_total, tax_total
-
-
-def _index_of(lines: list[TextLine], predicate: Callable[[str], bool], start: int = 0) -> int | None:
-    for i in range(start, len(lines)):
-        if predicate(lines[i].text.strip()):
-            return i
-    return None
+    return column("base"), column("tax")

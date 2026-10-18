@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -194,6 +194,14 @@ def find_amount(lines: Iterable[TextLine], pattern: re.Pattern[str]) -> tuple[in
             if cents is not None:
                 return cents, line.confidence, line.text
     return None, 0.0, None
+
+
+def index_of(lines: list[TextLine], predicate: Callable[[str], bool], start: int = 0) -> int | None:
+    """Index of the first line (from `start`) whose stripped text satisfies `predicate`."""
+    for i in range(start, len(lines)):
+        if predicate(lines[i].text.strip()):
+            return i
+    return None
 
 
 def _clean_description(text: str) -> str:

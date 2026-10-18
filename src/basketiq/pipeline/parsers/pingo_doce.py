@@ -16,7 +16,6 @@ Layout (calibrated on real 2026 receipts, PDF from the app/e-mail):
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
 
 from basketiq.domain.money import parse_money_cents
 from basketiq.domain.status import Merchant
@@ -26,11 +25,12 @@ from basketiq.pipeline.parsers.base import (
     build_item,
     choose_purchase_datetime,
     find_amount,
+    index_of,
     parse_date_candidates,
     parse_tax_table,
     unresolved_line,
 )
-from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt, TextLine
+from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt
 
 _ITEM = re.compile(
     rf"^(?P<tax>[A-Z])\s+(?P<desc>.+?)\s+"
@@ -51,8 +51,8 @@ class PingoDoceParser:
 
     def parse(self, doc: DocumentText) -> ParsedReceipt:
         lines = doc.lines
-        start = _index_of(lines, lambda t: t.strip().lower() == "artigos")
-        end = _index_of(lines, lambda t: t.strip().lower() == "resumo", start + 1 if start is not None else 0)
+        start = index_of(lines, lambda t: t.lower() == "artigos")
+        end = index_of(lines, lambda t: t.lower() == "resumo", start + 1 if start is not None else 0)
         item_zone = lines[(start + 1 if start is not None else 0) : end if end is not None else len(lines)]
         summary = lines[end:] if end is not None else []
 
@@ -117,10 +117,3 @@ class PingoDoceParser:
             parser_version=self.version,
             notes=notes,
         )
-
-
-def _index_of(lines: list[TextLine], predicate: Callable[[str], bool], start: int = 0) -> int | None:
-    for i in range(start, len(lines)):
-        if predicate(lines[i].text):
-            return i
-    return None
