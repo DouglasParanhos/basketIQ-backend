@@ -47,16 +47,31 @@ class PaddleOcrEngine:
         tokens: list[TextToken] = []
         for result in results:
             data = result.json["res"]
-            for text, score, box in zip(
-                data["rec_texts"], data["rec_scores"], data["rec_boxes"], strict=False
+            for text, score, box, poly in zip(
+                data["rec_texts"], data["rec_scores"], data["rec_boxes"], data["rec_polys"], strict=False
             ):
                 if not text.strip():
                     continue
                 x0, y0, x1, y1 = (float(v) for v in box)
                 tokens.append(
-                    TextToken(text=text, x0=x0, y0=y0, x1=x1, y1=y1, confidence=float(score), page=page)
+                    TextToken(
+                        text=text,
+                        x0=x0,
+                        y0=y0,
+                        x1=x1,
+                        y1=y1,
+                        confidence=float(score),
+                        page=page,
+                        slope=_baseline_slope(poly),
+                    )
                 )
         return tokens
+
+
+def _baseline_slope(poly: Any) -> float | None:
+    """dy/dx of the top edge of a detected text polygon (points ordered top-left, top-right, ...)."""
+    (x0, y0), (x1, y1) = poly[0], poly[1]
+    return float(y1 - y0) / float(x1 - x0) if x1 > x0 else None
 
 
 def main() -> None:

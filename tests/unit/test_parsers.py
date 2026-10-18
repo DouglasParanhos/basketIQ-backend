@@ -141,10 +141,76 @@ def test_continente_quantity_line_without_description_is_kept_unresolved() -> No
     assert len(parsed.lines) == 1 and parsed.lines[0].unresolved
 
 
+AUCHAN_LINES = [
+    "AUCHAN RETAIL PORTUGAL, S.A.",
+    "FATURA",
+    "N0.4111032026100001/001/10",
+    "IVA ARTIGO/QT/LI PRECO VALOR",
+    "Perfumaria",
+    "I2 COLGATE MAX WHITE ON",
+    "2 X 2,68 5,36",
+    "I2 ELIXIR AUCHAN 500 ML 1,40",
+    "3 volumes 6,76",
+    "TOTAL PAGO 6,76",
+    "Visa 0,00",
+    "TROCO",
+    "RESUMO DO IVA",
+    "TAXA BASE VALOR",
+    "23,00% (I2) 5,50 1,26",
+    "TOTAL 5,50 1,26",
+    "Data Emissao : 2026-10-18 13:27",
+]
+
+
+@pytest.mark.req("RF-06")
+def test_auchan_items_total_vat_reference_and_date() -> None:
+    parsed = parser_for(Merchant.AUCHAN).parse(doc_from_lines(AUCHAN_LINES))
+    toothpaste, mouthwash = parsed.lines
+    assert toothpaste.raw_description == "COLGATE MAX WHITE ON"
+    assert (toothpaste.quantity, toothpaste.unit, toothpaste.unit_price_cents) == (Decimal(2), "un", 268)
+    assert (toothpaste.line_total_cents, toothpaste.tax_code) == (536, "I2")
+    assert (mouthwash.quantity, mouthwash.line_total_cents) == (Decimal(1), 140)
+    assert (parsed.total_cents, parsed.subtotal_cents, parsed.tax_cents) == (676, 550, 126)
+    assert parsed.receipt_ref == "4111032026100001/001/10"
+    assert parsed.purchase_at == datetime(2026, 10, 18, 13, 27, tzinfo=LISBON)
+    assert parsed.parser_version == "auchan-1.0"
+
+
+@pytest.mark.req("RF-06")
+def test_auchan_tolerates_ocr_damage_in_class_quantity_and_total() -> None:
+    lines = [
+        "IVA ARTIGO/QT/LI PRECO VALOR",
+        "12 COLGATE MAX WHIIE ON",  # "I2" read as "12"
+        "X 2,68 5,36",  # quantity digit lost
+        "3 volunes 6,76",  # "TOTAL PAGO" line not read
+    ]
+    lines += ["IUA Liquidado 23,00% (12) 5,50 1,26"]  # heading glued to the VAT row
+    parsed = parser_for(Merchant.AUCHAN).parse(doc_from_lines(lines))
+    (item,) = parsed.lines
+    assert (parsed.subtotal_cents, parsed.tax_cents) == (550, 126)
+    assert (item.quantity, item.unit_price_cents, item.line_total_cents) == (Decimal(2), 268, 536)
+    assert item.field_confidence["quantity"] < item.field_confidence["line_total"]  # rebuilt, less sure
+    assert parsed.total_cents == 676
+
+
+@pytest.mark.req("RF-06")
+def test_auchan_lines_it_does_not_understand_are_kept_unresolved() -> None:
+    lines = [
+        "IVA ARTIGO/QT/LI PRECO VALOR",
+        "I1 LEITE 0,89",
+        "Desconto Cartao 0,20",  # discounts are not calibrated: never guessed
+        "I1 DESCRICAO SEM PRECO",  # description whose quantity line never came
+        "TOTAL PAGO 0,89",
+    ]
+    parsed = parser_for(Merchant.AUCHAN).parse(doc_from_lines(lines))
+    assert [line.unresolved for line in parsed.lines] == [False, True, True]
+    assert parsed.lines[1].line_total_cents == 20
+
+
 @pytest.mark.req("RF-06")
 def test_generic_parser_never_reaches_threshold() -> None:
-    parsed = parser_for(Merchant.AUCHAN).parse(
-        doc_from_lines(["AUCHAN", "LEITE 0,89", "TOTAL A PAGAR 0,89", "Data: 20/09/2026 11:05"])
+    parsed = parser_for(Merchant.UNKNOWN).parse(
+        doc_from_lines(["MERCEARIA", "LEITE 0,89", "TOTAL A PAGAR 0,89", "Data: 20/09/2026 11:05"])
     )
     assert parsed.lines and all(
         v <= CONFIDENCE_CAP for line in parsed.lines for v in line.field_confidence.values()
@@ -184,6 +250,7 @@ def test_purchase_time_is_lisbon_local_time_across_dst() -> None:
         (["CONTINENTE", "MODELO CONTINENTE HIPERMERCADOS"], Merchant.CONTINENTE),
         (["BD Defensores Chaves", "Registada CRC Porto sob nº 502011475"], Merchant.CONTINENTE),
         (["AUCHAN PORTUGAL", "auchan.pt"], Merchant.AUCHAN),
+        (["Cap. Social: 100.000.000 Euros", "Cuntribuinte Nr 503003808"], Merchant.AUCHAN),
         (["MERCEARIA DO BAIRRO"], Merchant.UNKNOWN),
     ],
 )

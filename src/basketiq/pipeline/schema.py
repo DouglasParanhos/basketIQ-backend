@@ -22,6 +22,8 @@ class TextToken(BaseModel):
     y1: float
     confidence: float = 1.0
     page: int = 0
+    # Baseline angle (dy/dx) of the detected text, when the OCR reports a tilted box.
+    slope: float | None = None
 
 
 class TextLine(BaseModel):

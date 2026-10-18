@@ -37,6 +37,7 @@ _SIGNALS: dict[Merchant, list[tuple[re.Pattern[str], float, bool]]] = {
     Merchant.AUCHAN: [
         (re.compile(r"\bAUCHAN\b"), 0.9, True),
         (re.compile(r"AUCHAN\.PT"), 0.6, False),
+        (re.compile(r"503\s?003\s?808"), 0.95, False),  # NIF of Auchan Retail Portugal printed on the receipt
     ],
 }
 

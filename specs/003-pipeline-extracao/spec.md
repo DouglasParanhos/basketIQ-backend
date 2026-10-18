@@ -54,9 +54,16 @@ Sem ambiguidades, não há chamada de LLM nem de serviço externo.
    mantida como não resolvida (nunca desaparece). — RF-06 · `tests/unit/test_parsers.py::test_unparseable_priced_line_is_kept_unresolved`
 4. **Given** quantidade × preço diferente do total da linha, **When** é avaliada, **Then** os campos
    ficam abaixo do limiar. — RF-06, F-12 · `tests/unit/test_parsers.py::test_inconsistent_quantity_line_gets_low_confidence`
-5. **Given** Continente ou Auchan (sem amostras), **When** são interpretados pelo parser genérico,
+5. **Given** um supermercado sem parser calibrado, **When** é interpretado pelo parser genérico,
    **Then** todos os campos ficam limitados a 0,6 e a nota vai sempre para revisão. — RF-06 ·
    `tests/unit/test_parsers.py::test_generic_parser_never_reaches_threshold`
+5a. **Given** uma fatura Auchan (produtos, quantidade × preço, `TOTAL PAGO`, quadro de IVA), **When** é
+   interpretada, **Then** linhas, total, base e IVA são lidos; classe de IVA e quantidade com erro de OCR
+   são toleradas, e linhas não calibradas (descontos) ficam não resolvidas. — RF-06 ·
+   `tests/unit/test_parsers.py::test_auchan_items_total_vat_reference_and_date`, `… test_auchan_tolerates_ocr_damage_in_class_quantity_and_total`, `… test_auchan_lines_it_does_not_understand_are_kept_unresolved`
+5b. **Given** uma foto inclinada ou com o papel curvado, **When** as linhas são reconstruídas, **Then** a
+   descrição e o valor da mesma linha ficam juntos e linhas vizinhas não se fundem (ângulo local dado pelo
+   OCR). — RF-06 · `tests/unit/test_layout.py`
 6. **Given** datas lidas por OCR com erro (mês 18) ou contraditórias, **When** a data é escolhida,
    **Then** datas inválidas são descartadas e a confiança reflete a corroboração; a hora é de
    Lisboa (com mudança de hora). — RF-06, PT-7 ·
@@ -173,5 +180,8 @@ Sem ambiguidades, não há chamada de LLM nem de serviço externo.
 - [NEEDS CLARIFICATION: fornecedor externo de OCR/IA — apenas adapter e mock implementados; escolha
   depende de spike de custo, qualidade, latência e RGPD.]
 - [NEEDS CLARIFICATION: calibração dos limiares por campo e supermercado no piloto com amostras reais.]
-- [NEEDS CLARIFICATION: amostras reais de Continente e Auchan para substituir o parser genérico.]
+- [NEEDS CLARIFICATION: mais amostras reais de Auchan (só há uma foto, com 2 linhas): descontos, produtos
+  ao peso e PDF digital ainda não foram vistos.]
+- [NEEDS CLARIFICATION: fotos reais com outras inclinações/curvaturas; a correção de ângulo foi
+  calibrada numa foto e validada com fotos sintéticas deformadas apenas no teste de layout.]
 - As linhas Lidl de quantidade/desconto ainda não foram vistas numa nota real e pontuam com fator 0,85.

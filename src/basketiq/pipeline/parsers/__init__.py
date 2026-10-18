@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from basketiq.domain.status import Merchant
+from basketiq.pipeline.parsers.auchan import AuchanParser
 from basketiq.pipeline.parsers.base import Parser
 from basketiq.pipeline.parsers.continente import ContinenteParser
 from basketiq.pipeline.parsers.generic_pt import GenericPtParser
@@ -15,8 +16,17 @@ def parser_for(merchant: Merchant) -> Parser:
         return LidlParser()
     if merchant == Merchant.CONTINENTE:
         return ContinenteParser()
-    # Auchan has no calibrated parser yet (no samples); see generic_pt docstring.
+    if merchant == Merchant.AUCHAN:
+        return AuchanParser()
     return GenericPtParser(merchant)
 
 
-__all__ = ["ContinenteParser", "GenericPtParser", "LidlParser", "Parser", "PingoDoceParser", "parser_for"]
+__all__ = [
+    "AuchanParser",
+    "ContinenteParser",
+    "GenericPtParser",
+    "LidlParser",
+    "Parser",
+    "PingoDoceParser",
+    "parser_for",
+]

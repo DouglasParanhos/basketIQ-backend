@@ -1,5 +1,18 @@
 {
   "per_merchant": {
+    "AUCHAN": {
+      "documents": 1,
+      "merchant_accuracy": 1.0,
+      "date_accuracy": 1.0,
+      "total_accuracy": 1.0,
+      "status_accuracy": 1.0,
+      "route_accuracy": 1.0,
+      "line_recall": 1.0,
+      "line_precision": 1.0,
+      "field_accuracy": 1.0,
+      "price_mae_cents": 0.0,
+      "review_flag_accuracy": null
+    },
     "CONTINENTE": {
       "documents": 1,
       "merchant_accuracy": 1.0,

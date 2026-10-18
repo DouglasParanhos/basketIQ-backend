@@ -1,0 +1,35 @@
+{
+  "merchant": "AUCHAN",
+  "route": "PDF_TEXT",
+  "purchase_at": "2026-09-14T16:20:00+01:00",
+  "total_cents": 633,
+  "subtotal_cents": 564,
+  "tax_cents": 69,
+  "status": "COMPLETED",
+  "lines": [
+    {
+      "raw_description": "ARROZ AGULHA 1KG",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 129,
+      "line_total_cents": 129,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "LEITE MEIO GORDO",
+      "quantity": "3",
+      "unit": "un",
+      "unit_price_cents": 85,
+      "line_total_cents": 255,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "SABONETE LIQUIDO 300ML",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 249,
+      "line_total_cents": 249,
+      "discount_cents": 0
+    }
+  ]
+}

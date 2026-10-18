@@ -1,6 +1,6 @@
 """Generic Portuguese receipt parser.
 
-Used for Auchan (no real samples yet) and for unknown merchants. It recognises the
+Used for merchants without a calibrated parser (today only unknown ones). It recognises the
 common shape "description … amount [VAT]" with optional "qty x unit price" and stops at the
 total. Every field is capped below the review threshold, so its output is never auto-confirmed.
 """

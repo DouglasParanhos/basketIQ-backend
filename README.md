@@ -41,7 +41,12 @@ Key decisions (and deviations from the spec, with reasons):
 | Pingo Doce | `pingo_doce-1.0` | 2 real PDF receipts (100 % lines/totals) + synthetic text/scanned |
 | Lidl | `lidl-1.0` | 1 real Lidl Plus screenshot via OCR (100 %) + synthetic; quantity/discount lines not yet seen on a real receipt (scored lower) |
 | Continente | `continente-1.0` | 2 real PDF receipts (100 % lines/totals; multi-line items, "POUPANCA", card-balance payment) + synthetic |
-| Auchan | `generic_pt-1.0` | no samples; every field capped at 0.6 → always reviewed |
+| Auchan | `auchan-1.0` | 1 real photo via OCR (100 %: two lines, total, VAT) + synthetic; only the item/quantity/total/VAT shapes of that receipt are calibrated, other priced lines (discounts, weighed items) are kept unresolved |
+| Others | `generic_pt-1.0` | unknown merchants: every field capped at 0.6 → always reviewed |
+
+Photos are straightened before lines are rebuilt: the OCR reports the baseline angle of each text and the
+long ones give the local tilt (a curled receipt tilts one way near the top and the other near the bottom),
+see `pipeline/layout.py`.
 
 Real receipts contain personal data (NIF, card digits) and are **never committed**. Keep them in
 `../Receipts/<Merchant>/` with a `<name>.expected.json` next to each file and run `make golden-real

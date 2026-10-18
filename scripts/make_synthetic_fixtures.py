@@ -304,6 +304,68 @@ def main() -> None:
     }
     write_case("continente_text", "document.pdf", cont_expected, lambda p: write_text_pdf(p, cont_lines))
 
+    # --- Auchan (layout of the real "Fatura"; items are fictional) --------------------------
+    auchan_lines = [
+        "AUCHAN RETAIL PORTUGAL, S.A.",
+        "Contribuinte Nr 503003808",
+        "FATURA",
+        "No.4111032026100001/001/10",
+        "IVA ARTIGO/QT/LI PRECO VALOR",
+        "Mercearia",
+        "I1 ARROZ AGULHA 1KG 1,29",
+        "I1 LEITE MEIO GORDO",
+        "3 X 0,85 2,55",
+        "Perfumaria",
+        "I2 SABONETE LIQUIDO 300ML 2,49",
+        "4 volumes 6,33",
+        "TOTAL PAGO 6,33",
+        "Multibanco 6,33",
+        "TROCO 0,00",
+        "RESUMO DO IVA",
+        "TAXA BASE VALOR",
+        "IVA Liquidado",
+        "6,00% (I1) 3,62 0,22",
+        "23,00% (I2) 2,02 0,47",
+        "TOTAL 5,64 0,69",
+        "Data Emissao : 2026-09-14 16:20",
+    ]
+    auchan_expected = {
+        "merchant": "AUCHAN",
+        "route": "PDF_TEXT",
+        "purchase_at": "2026-09-14T16:20:00+01:00",
+        "total_cents": 633,
+        "subtotal_cents": 564,
+        "tax_cents": 69,
+        "status": "COMPLETED",
+        "lines": [
+            {
+                "raw_description": "ARROZ AGULHA 1KG",
+                "quantity": "1",
+                "unit": "un",
+                "unit_price_cents": 129,
+                "line_total_cents": 129,
+                "discount_cents": 0,
+            },
+            {
+                "raw_description": "LEITE MEIO GORDO",
+                "quantity": "3",
+                "unit": "un",
+                "unit_price_cents": 85,
+                "line_total_cents": 255,
+                "discount_cents": 0,
+            },
+            {
+                "raw_description": "SABONETE LIQUIDO 300ML",
+                "quantity": "1",
+                "unit": "un",
+                "unit_price_cents": 249,
+                "line_total_cents": 249,
+                "discount_cents": 0,
+            },
+        ],
+    }
+    write_case("auchan_text", "document.pdf", auchan_expected, lambda p: write_text_pdf(p, auchan_lines))
+
     # --- Unknown merchant -> user must choose ------------------------------------------------
     unknown_lines = ["MERCEARIA DO BAIRRO", "Data: 21/09/2026 09:00", "PAO 0,50", "LEITE 0,89", "TOTAL 1,39"]
     unknown_expected = {
