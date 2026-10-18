@@ -66,9 +66,13 @@ produtos mais comprados por quantidade e valor. Só compras confirmadas contam.
 - **FR-001**: `GET /v1/analytics/summary` MUST aceitar `from`, `to`, `merchant`, `product_id`.
 - **FR-002**: Gasto MUST ser Σ(total da linha − desconto) de compras `CONFIRMED`.
 - **FR-003**: Variação MUST comparar com o período imediatamente anterior de igual duração.
-- **FR-004**: Preço médio MUST ser ponderado pela quantidade e declarar a base (un, kg, l).
+- **FR-004**: Preço médio de um produto MUST ser ponderado pela quantidade e declarar a base (un, kg, l).
+  O resumo não calcula preço médio global: misturar produtos de preços distintos não tem significado.
 - **FR-005**: Os agregados são consultas SQL sobre compras confirmadas (idempotentes por construção),
   sem materializações — desvio consciente justificado pelas medições abaixo.
+- **FR-006**: `GET /v1/analytics/consumption` MUST aceitar `from`, `to`, `merchant`, `limit` e devolver, por
+  produto identificado, compras (notas), unidades, unidades/mês no período, intervalo médio entre dias de
+  compra (nulo com uma só compra) e primeira/última compra, ordenado por nº de compras.
 
 ### Key Entities
 

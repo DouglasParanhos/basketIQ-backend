@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -123,6 +125,55 @@ def test_weighed_product_uses_price_per_kg(history: TestClient) -> None:
     assert a["total_quantity"] == "1.5"
     assert a["avg_price_cents"] == 153  # (150 + 80) / 1.5 kg
     assert (a["min_price_cents"], a["max_price_cents"]) == (150, 160)
+
+
+@pytest.mark.req("RF-09")
+def test_consumption_frequency_interval_and_monthly_rate(history: TestClient) -> None:
+    c = history.get("/v1/analytics/consumption?from=2026-09-01&to=2026-09-30").json()
+    by_name = {i["name"]: i for i in c["items"]}
+    milk = by_name["LEITE MEIO GORDO"]
+    # Three September purchases (2, 20 and 30 Sep) of 2 + 1 + 1 units, 14 days apart on average.
+    assert (milk["purchases"], milk["units"], milk["avg_interval_days"]) == (3, "4", 14.0)
+    assert milk["units_per_month"] == round(4 / (30 / 30.4375), 1)
+    assert (milk["first_purchase"], milk["last_purchase"]) == ("2026-09-02", "2026-09-30")
+    assert by_name["BANANA"]["avg_interval_days"] is None  # a single purchase has no interval
+    assert c["items"][0]["name"] == "LEITE MEIO GORDO"  # most frequent first
+    assert "AGUA" not in by_name  # bought in October
+
+
+@pytest.mark.req("RF-09")
+def test_consumption_filters_and_limits(history: TestClient) -> None:
+    wide = history.get("/v1/analytics/consumption?from=2026-08-01&to=2026-10-31").json()
+    milk = next(i for i in wide["items"] if i["name"] == "LEITE MEIO GORDO")
+    assert (milk["purchases"], milk["avg_interval_days"]) == (4, 18.7)  # 56 days over 3 gaps
+    lidl = history.get("/v1/analytics/consumption?from=2026-08-01&to=2026-10-31&merchant=LIDL").json()
+    assert {i["name"] for i in lidl["items"]} == {"LEITE MEIO GORDO", "PAO"}
+    assert (
+        len(history.get("/v1/analytics/consumption?from=2026-08-01&to=2026-10-31&limit=1").json()["items"])
+        == 1
+    )
+    empty = history.get("/v1/analytics/consumption?from=2025-01-01&to=2025-01-31").json()
+    assert empty["empty"] and empty["items"] == []
+    assert history.get("/v1/analytics/consumption?from=2026-09-30&to=2026-09-01").status_code == 422
+
+
+@pytest.mark.req("RF-09")
+def test_consumption_over_three_chains_and_months(
+    client: TestClient, login: Any, storage: Any, run_jobs: Any
+) -> None:
+    """Nine synthetic receipts (Continente, Pingo Doce, Lidl x Aug/Sep/Oct 2026) against an oracle
+    computed outside the backend; fixtures in tests/fixtures/consumption."""
+    folder = Path(__file__).resolve().parents[1] / "fixtures" / "consumption"
+    login(client)
+    for rec in json.loads((folder / "manifest.json").read_text(encoding="utf-8")):
+        receipt = import_receipt(client, storage, run_jobs, (folder / rec["file"]).read_bytes())
+        assert receipt["status"] == "CONFIRMED", (rec["file"], receipt["review_reasons"])
+        assert receipt["totals"]["printed_total_cents"] == rec["total_cents"], rec["file"]
+    oracle = json.loads((folder / "expected_consumption.json").read_text(encoding="utf-8"))
+    for period, expected in oracle.items():
+        start, end = period.split("..")
+        got = client.get(f"/v1/analytics/consumption?from={start}&to={end}&limit=100").json()
+        assert [{k: v for k, v in i.items() if k != "product_id"} for i in got["items"]] == expected, period
 
 
 @pytest.mark.req("F-21")

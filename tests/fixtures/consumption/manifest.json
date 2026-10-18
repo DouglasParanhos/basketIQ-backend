@@ -1,0 +1,229 @@
+[
+  {
+    "file": "continente_2026-08_agosto.pdf",
+    "merchant": "CONTINENTE",
+    "date": "2026-08-08",
+    "total_cents": 659,
+    "rows": [
+      {
+        "name": "LEITE MEIO GORDO",
+        "units": "2",
+        "net": 178
+      },
+      {
+        "name": "PAO DE FORMA",
+        "units": "1",
+        "net": 159
+      },
+      {
+        "name": "BANANA",
+        "units": "1",
+        "net": 197
+      },
+      {
+        "name": "ARROZ CAROLINO 1KG",
+        "units": "1",
+        "net": 125
+      }
+    ]
+  },
+  {
+    "file": "pingo-doce_2026-08_agosto.pdf",
+    "merchant": "PINGO_DOCE",
+    "date": "2026-08-15",
+    "total_cents": 549,
+    "rows": [
+      {
+        "name": "LEITE MEIO GORDO",
+        "units": "1",
+        "net": 79
+      },
+      {
+        "name": "IOGURTE NATURAL 4X125G",
+        "units": "3",
+        "net": 285
+      },
+      {
+        "name": "QUEIJO FRESCO",
+        "units": "1",
+        "net": 185
+      }
+    ]
+  },
+  {
+    "file": "lidl_2026-08_agosto.pdf",
+    "merchant": "LIDL",
+    "date": "2026-08-22",
+    "total_cents": 712,
+    "rows": [
+      {
+        "name": "LEITE MEIO GORDO",
+        "units": "1",
+        "net": 75
+      },
+      {
+        "name": "PAO DE FORMA",
+        "units": "1",
+        "net": 129
+      },
+      {
+        "name": "DETERGENTE LOICA",
+        "units": "1",
+        "net": 329
+      },
+      {
+        "name": "QUEIJO FRESCO",
+        "units": "1",
+        "net": 179
+      }
+    ]
+  },
+  {
+    "file": "continente_2026-09_setembro.pdf",
+    "merchant": "CONTINENTE",
+    "date": "2026-09-05",
+    "total_cents": 537,
+    "rows": [
+      {
+        "name": "LEITE MEIO GORDO",
+        "units": "2",
+        "net": 178
+      },
+      {
+        "name": "BANANA",
+        "units": "1",
+        "net": 161
+      },
+      {
+        "name": "IOGURTE NATURAL 4X125G",
+        "units": "2",
+        "net": 198
+      }
+    ]
+  },
+  {
+    "file": "pingo-doce_2026-09_setembro.pdf",
+    "merchant": "PINGO_DOCE",
+    "date": "2026-09-12",
+    "total_cents": 487,
+    "rows": [
+      {
+        "name": "LEITE MEIO GORDO",
+        "units": "1",
+        "net": 79
+      },
+      {
+        "name": "PAO DE FORMA",
+        "units": "1",
+        "net": 119
+      },
+      {
+        "name": "BANANA",
+        "units": "1",
+        "net": 104
+      },
+      {
+        "name": "QUEIJO FRESCO",
+        "units": "1",
+        "net": 185
+      }
+    ]
+  },
+  {
+    "file": "lidl_2026-09_setembro.pdf",
+    "merchant": "LIDL",
+    "date": "2026-09-19",
+    "total_cents": 795,
+    "rows": [
+      {
+        "name": "LEITE MEIO GORDO",
+        "units": "2",
+        "net": 150
+      },
+      {
+        "name": "IOGURTE NATURAL 4X125G",
+        "units": "4",
+        "net": 316
+      },
+      {
+        "name": "DETERGENTE LOICA",
+        "units": "1",
+        "net": 329
+      }
+    ]
+  },
+  {
+    "file": "continente_2026-10_outubro.pdf",
+    "merchant": "CONTINENTE",
+    "date": "2026-10-03",
+    "total_cents": 721,
+    "rows": [
+      {
+        "name": "LEITE MEIO GORDO",
+        "units": "1",
+        "net": 89
+      },
+      {
+        "name": "PAO DE FORMA",
+        "units": "2",
+        "net": 318
+      },
+      {
+        "name": "ARROZ CAROLINO 1KG",
+        "units": "1",
+        "net": 125
+      },
+      {
+        "name": "QUEIJO FRESCO",
+        "units": "1",
+        "net": 189
+      }
+    ]
+  },
+  {
+    "file": "pingo-doce_2026-10_outubro.pdf",
+    "merchant": "PINGO_DOCE",
+    "date": "2026-10-10",
+    "total_cents": 635,
+    "rows": [
+      {
+        "name": "LEITE MEIO GORDO",
+        "units": "2",
+        "net": 158
+      },
+      {
+        "name": "BANANA",
+        "units": "1",
+        "net": 192
+      },
+      {
+        "name": "IOGURTE NATURAL 4X125G",
+        "units": "3",
+        "net": 285
+      }
+    ]
+  },
+  {
+    "file": "lidl_2026-10_outubro.pdf",
+    "merchant": "LIDL",
+    "date": "2026-10-17",
+    "total_cents": 383,
+    "rows": [
+      {
+        "name": "LEITE MEIO GORDO",
+        "units": "1",
+        "net": 75
+      },
+      {
+        "name": "PAO DE FORMA",
+        "units": "1",
+        "net": 129
+      },
+      {
+        "name": "QUEIJO FRESCO",
+        "units": "1",
+        "net": 179
+      }
+    ]
+  }
+]

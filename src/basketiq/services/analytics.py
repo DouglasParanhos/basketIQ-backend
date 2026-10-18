@@ -32,6 +32,10 @@ class Filters:
     merchant: str | None = None
     product_id: uuid.UUID | None = None
 
+    @property
+    def days(self) -> int:
+        return (self.date_to - self.date_from).days + 1
+
 
 def _bounds(f: Filters, tz: ZoneInfo) -> tuple[datetime, datetime]:
     return datetime.combine(f.date_from, time(0), tz), datetime.combine(
@@ -40,7 +44,7 @@ def _bounds(f: Filters, tz: ZoneInfo) -> tuple[datetime, datetime]:
 
 
 def previous_period(f: Filters) -> Filters:
-    span = (f.date_to - f.date_from).days + 1
+    span = f.days
     return Filters(
         f.date_from - timedelta(days=span), f.date_from - timedelta(days=1), f.merchant, f.product_id
     )
@@ -80,25 +84,18 @@ def _cards(db: Session, user_id: uuid.UUID, f: Filters, tz: ZoneInfo) -> dict[st
                 func.count(func.distinct(Receipt.id)),
                 func.coalesce(func.sum(_units), 0),
                 func.count(ReceiptLine.id),
-                func.coalesce(func.sum(case((ReceiptLine.unit == Unit.UNIT, _net), else_=0)), 0),
-                func.coalesce(
-                    func.sum(case((ReceiptLine.unit == Unit.UNIT, ReceiptLine.quantity_decimal), else_=0)), 0
-                ),
             ),
             user_id,
             f,
             tz,
         )
     ).one()
-    spent, purchases, units, lines, unit_spent, unit_qty = row
-    avg_unit = round(Decimal(unit_spent) / Decimal(unit_qty)) if unit_qty else None
+    spent, purchases, units, lines = row
     return {
         "total_spent_cents": int(spent),
         "purchases": int(purchases),
         "units": str(Decimal(units).normalize()) if units else "0",
         "articles": int(lines),
-        "avg_price_per_unit_cents": avg_unit,
-        "avg_price_basis": "un" if avg_unit is not None else None,
     }
 
 
@@ -124,7 +121,7 @@ def summary(db: Session, user_id: uuid.UUID, f: Filters, tz_name: str) -> dict[s
         **{k: prev_cards[k] for k in ("total_spent_cents", "purchases", "units")},
     }
 
-    span = (f.date_to - f.date_from).days + 1
+    span = f.days
     granularity = "day" if span <= 62 else "month"
     local = func.timezone(tz_name, Receipt.purchase_at)
     bucket = func.date_trunc(granularity, local)
@@ -329,6 +326,73 @@ def product_analytics(
         "history": history,
         "by_merchant": comparison,
         "insufficient_data": len(history) < 2,
+    }
+
+
+def consumption(db: Session, user_id: uuid.UUID, f: Filters, tz_name: str, limit: int) -> dict[str, Any]:
+    """How often and how much of each identified product the user buys in the period.
+
+    ``purchases`` counts receipts; the interval is measured between distinct purchase days. Units use
+    the dashboard rule (weighed items count as one article), so the rate is comparable with it.
+    """
+    tz = ZoneInfo(tz_name)
+    rows = db.execute(
+        _line_scope(
+            select(
+                ReceiptLine.normalized_product_id,
+                func.max(Product.canonical_name),
+                Receipt.id,
+                Receipt.purchase_at,
+                func.sum(_units),
+                func.sum(_net),
+            ),
+            user_id,
+            f,
+            tz,
+        )
+        .outerjoin(Product, Product.id == ReceiptLine.normalized_product_id)
+        .where(ReceiptLine.normalized_product_id.is_not(None))
+        .group_by(ReceiptLine.normalized_product_id, Receipt.id, Receipt.purchase_at)
+    ).all()
+
+    per_product: dict[uuid.UUID, dict[str, Any]] = {}
+    for pid, name, _rid, purchase_at, units, spent in rows:
+        p = per_product.setdefault(
+            pid, {"name": name, "purchases": 0, "units": Decimal(0), "spent": 0, "days": set()}
+        )
+        p["purchases"] += 1
+        p["units"] += Decimal(units)
+        p["spent"] += int(spent)
+        p["days"].add(purchase_at.astimezone(tz).date())
+
+    months = Decimal(f.days) / Decimal("30.4375")
+    items = []
+    for pid, p in per_product.items():
+        days = sorted(p["days"])
+        interval = round((days[-1] - days[0]).days / (len(days) - 1), 1) if len(days) > 1 else None
+        items.append(
+            {
+                "product_id": str(pid),
+                "name": p["name"],
+                "purchases": p["purchases"],
+                "units": str(p["units"].normalize()),
+                "units_per_month": round(float(p["units"] / months), 1),
+                "spent_cents": p["spent"],
+                "avg_interval_days": interval,
+                "first_purchase": days[0].isoformat(),
+                "last_purchase": days[-1].isoformat(),
+            }
+        )
+    items.sort(key=lambda i: (-i["purchases"], -Decimal(i["units"]), i["name"] or ""))
+    return {
+        "filters": {
+            "from": f.date_from.isoformat(),
+            "to": f.date_to.isoformat(),
+            "merchant": f.merchant,
+            "product_id": None,
+        },
+        "items": items[:limit],
+        "empty": not items,
     }
 
 

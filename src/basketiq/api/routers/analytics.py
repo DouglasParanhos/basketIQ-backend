@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 
 from basketiq.api.deps import ConsentedUser, Db, SettingsDep
 from basketiq.api.errors import ApiError, FieldError
-from basketiq.api.schemas import ProductAnalyticsOut, ProductSearchItem, SummaryOut
+from basketiq.api.schemas import ConsumptionOut, ProductAnalyticsOut, ProductSearchItem, SummaryOut
 from basketiq.domain.status import Merchant
 from basketiq.observability import metrics
 from basketiq.services import analytics
@@ -54,6 +54,25 @@ def summary(
     f = _filters(date_from, date_to, merchant, product_id)
     metrics.ANALYTICS_REQUESTS.labels("summary", str(merchant is not None), str(product_id is not None)).inc()
     return SummaryOut.model_validate(analytics.summary(db, user.id, f, settings.timezone))
+
+
+@router.get(
+    "/analytics/consumption",
+    response_model=ConsumptionOut,
+    summary="Purchase frequency and monthly rate per product",
+)
+def consumption(
+    db: Db,
+    settings: SettingsDep,
+    user: ConsentedUser,
+    date_from: Annotated[date, Query(alias="from")],
+    date_to: Annotated[date, Query(alias="to")],
+    merchant: Merchant | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> ConsumptionOut:
+    f = _filters(date_from, date_to, merchant, None)
+    metrics.ANALYTICS_REQUESTS.labels("consumption", str(merchant is not None), "False").inc()
+    return ConsumptionOut.model_validate(analytics.consumption(db, user.id, f, settings.timezone, limit))
 
 
 @router.get(

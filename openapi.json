@@ -1367,6 +1367,87 @@
         }
       }
     },
+    "/v1/analytics/consumption": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Purchase frequency and monthly rate per product",
+        "operationId": "consumption_v1_analytics_consumption_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "To"
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Merchant"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merchant"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumptionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/products": {
       "get": {
         "tags": [
@@ -2043,28 +2124,6 @@
             "type": "integer",
             "title": "Articles"
           },
-          "avg_price_per_unit_cents": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Avg Price Per Unit Cents"
-          },
-          "avg_price_basis": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Avg Price Basis"
-          },
           "variation_pct": {
             "$ref": "#/components/schemas/VariationOut"
           },
@@ -2078,12 +2137,102 @@
           "purchases",
           "units",
           "articles",
-          "avg_price_per_unit_cents",
-          "avg_price_basis",
           "variation_pct",
           "previous_period"
         ],
         "title": "CardsOut"
+      },
+      "ConsumptionItem": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "title": "Product Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "purchases": {
+            "type": "integer",
+            "title": "Purchases"
+          },
+          "units": {
+            "type": "string",
+            "title": "Units"
+          },
+          "units_per_month": {
+            "type": "number",
+            "title": "Units Per Month"
+          },
+          "spent_cents": {
+            "type": "integer",
+            "title": "Spent Cents"
+          },
+          "avg_interval_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Interval Days"
+          },
+          "first_purchase": {
+            "type": "string",
+            "title": "First Purchase"
+          },
+          "last_purchase": {
+            "type": "string",
+            "title": "Last Purchase"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "name",
+          "purchases",
+          "units",
+          "units_per_month",
+          "spent_cents",
+          "avg_interval_days",
+          "first_purchase",
+          "last_purchase"
+        ],
+        "title": "ConsumptionItem"
+      },
+      "ConsumptionOut": {
+        "properties": {
+          "filters": {
+            "$ref": "#/components/schemas/SummaryFilters"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConsumptionItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "empty": {
+            "type": "boolean",
+            "title": "Empty"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filters",
+          "items",
+          "empty"
+        ],
+        "title": "ConsumptionOut"
       },
       "DeletionResult": {
         "properties": {

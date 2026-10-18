@@ -252,8 +252,6 @@ class CardsOut(BaseModel):
     purchases: int
     units: str
     articles: int
-    avg_price_per_unit_cents: int | None
-    avg_price_basis: str | None
     variation_pct: VariationOut
     previous_period: PreviousPeriodOut
 
@@ -300,6 +298,24 @@ class SummaryOut(BaseModel):
     by_merchant: list[MerchantShare]
     top_products_by_value: list[ProductRanking]
     top_products_by_quantity: list[ProductRanking]
+    empty: bool
+
+
+class ConsumptionItem(BaseModel):
+    product_id: str
+    name: str | None
+    purchases: int
+    units: str
+    units_per_month: float
+    spent_cents: int
+    avg_interval_days: float | None
+    first_purchase: str
+    last_purchase: str
+
+
+class ConsumptionOut(BaseModel):
+    filters: SummaryFilters
+    items: list[ConsumptionItem]
     empty: bool
 
 
