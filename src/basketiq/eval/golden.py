@@ -208,9 +208,10 @@ def evaluate_case(case: Case, ocr: OcrEngine, stats: dict[str, MerchantStats]) -
     return result
 
 
-def run(dirs: list[Path], use_ocr: bool) -> dict[str, Any]:
-    ocr: OcrEngine = NoOcr()
-    if use_ocr:
+def run(dirs: list[Path], use_ocr: bool, engine: OcrEngine | None = None) -> dict[str, Any]:
+    """`engine` lets callers that run several sets share one OCR engine (its models load once)."""
+    ocr: OcrEngine = engine or NoOcr()
+    if use_ocr and engine is None:
         from basketiq.config import get_settings
         from basketiq.pipeline.ocr import build_ocr_engine
 
