@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from basketiq.config import Settings
-from basketiq.db.models import ProcessingJob, Receipt, ReceiptLine, User
+from basketiq.db.models import ProcessingJob, Receipt, ReceiptLine, ReceiptPhoto, User
 from basketiq.domain.confidence import Evaluation, LineView, ReceiptView, evaluate
 from basketiq.domain.money import multiply_cents
 from basketiq.domain.status import (
@@ -22,12 +22,13 @@ from basketiq.domain.status import (
     LineReviewStatus,
     Merchant,
     ReceiptStatus,
+    SourceType,
 )
-from basketiq.pipeline.validation import ALLOWED_MIMES, EXTENSIONS, source_type_for
+from basketiq.pipeline.validation import ALLOWED_MIMES, EXTENSIONS, IMAGE_MIMES, source_type_for
 from basketiq.queue import JobQueue
 from basketiq.services import audit, products
 from basketiq.services.thresholds import thresholds_for
-from basketiq.storage import ObjectStorage, PresignedUpload, original_key, receipt_prefix
+from basketiq.storage import ObjectStorage, PresignedUpload, original_key, photo_key, receipt_prefix
 
 
 class ServiceError(Exception):
@@ -104,6 +105,7 @@ def view_of(receipt: Receipt) -> ReceiptView:
             and receipt.merchant_hint != receipt.merchant
             and "merchant" not in edited
         ),
+        join_notes=list(receipt.merge_notes or []),
     )
 
 
@@ -240,7 +242,7 @@ def request_processing(
         return active, False
     if receipt.original_deleted_at is not None:
         raise ServiceError(409, "original_deleted", "O ficheiro original já foi eliminado.")
-    if not storage.exists(receipt.object_key):
+    if not all(storage.exists(key) for key in [receipt.object_key, *(p.object_key for p in receipt.photos)]):
         # F-24: the upload did not complete (e.g. network loss). Recoverable: upload again.
         raise ServiceError(409, "upload_missing", "O envio do ficheiro não foi concluído. Envie novamente.")
     job = ProcessingJob(
@@ -262,15 +264,76 @@ def request_processing(
     return job, True
 
 
+def photo_file(receipt: Receipt, position: int) -> tuple[str, str]:
+    """Key and content type of a photo of the receipt (0 is the first, the rest are `receipt.photos`)."""
+    if position == 0:
+        return receipt.object_key, receipt.content_type
+    photo = next((p for p in receipt.photos if p.position == position), None)
+    if photo is None:
+        raise ServiceError(404, "not_found", "Foto não encontrada.")
+    return photo.object_key, photo.content_type
+
+
 def new_upload_url(
-    db: Session, settings: Settings, storage: ObjectStorage, user: User, receipt_id: uuid.UUID
+    db: Session,
+    settings: Settings,
+    storage: ObjectStorage,
+    user: User,
+    receipt_id: uuid.UUID,
+    position: int = 0,
 ) -> PresignedUpload:
-    """F-24: a fresh upload URL for a receipt whose upload did not complete."""
+    """F-24: a fresh upload URL for a photo (0 is the first) of a receipt whose upload did not complete."""
     receipt = get_owned(db, user, receipt_id)
     if receipt.processing_status != ReceiptStatus.RECEIVED or latest_job(db, receipt.id) is not None:
         raise ServiceError(409, "invalid_state", "O ficheiro desta compra já foi recebido.")
+    key, content_type = photo_file(receipt, position)
     return storage.presign_upload(
-        receipt.object_key, receipt.content_type, settings.upload_max_bytes, settings.upload_url_ttl_seconds
+        key, content_type, settings.upload_max_bytes, settings.upload_url_ttl_seconds
+    )
+
+
+def add_photo(
+    db: Session,
+    settings: Settings,
+    storage: ObjectStorage,
+    user: User,
+    receipt_id: uuid.UUID,
+    *,
+    filename: str,
+    content_type: str,
+    size_bytes: int,
+    sha256: str,
+) -> PresignedUpload:
+    """Another photo of a receipt too long for one (joined with the first when processed)."""
+    receipt = get_owned(db, user, receipt_id, for_update=True)
+    if receipt.processing_status != ReceiptStatus.RECEIVED or latest_job(db, receipt.id) is not None:
+        raise ServiceError(409, "invalid_state", "Só pode acrescentar fotos antes de processar a compra.")
+    errors: list[tuple[str, str]] = []
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if content_type not in IMAGE_MIMES or EXTENSIONS.get(ext) != content_type:
+        errors.append(("content_type", "Só é possível juntar fotografias (JPEG, PNG ou HEIC)."))
+    if size_bytes > settings.upload_max_bytes:
+        errors.append(("size_bytes", f"O ficheiro excede {settings.upload_max_bytes // (1024 * 1024)} MB."))
+    if receipt.source_type != SourceType.IMAGE:
+        errors.append(("content_type", "Só é possível juntar fotografias a uma fotografia."))
+    if len(receipt.photos) + 1 >= settings.upload_max_photos:
+        errors.append(("photos", f"No máximo {settings.upload_max_photos} fotos por nota."))
+    if errors:
+        raise ServiceError(422, "invalid_file", "Ficheiro inválido.", field_errors=errors)
+    position = max((p.position for p in receipt.photos), default=0) + 1
+    photo = ReceiptPhoto(
+        receipt_id=receipt.id,
+        position=position,
+        object_key=photo_key(user.id, receipt.id, position),
+        content_type=content_type,
+        size_bytes=size_bytes,
+        declared_hash=sha256.lower(),
+    )
+    receipt.photos.append(photo)
+    db.flush()
+    audit.record(db, "PHOTO_ADDED", user_id=user.id, receipt_id=receipt.id, position=position)
+    return storage.presign_upload(
+        photo.object_key, content_type, settings.upload_max_bytes, settings.upload_url_ttl_seconds
     )
 
 
@@ -308,6 +371,9 @@ def edit_receipt(
     if "merchant" in patch and patch["merchant"] != receipt.merchant:
         receipt.merchant = patch["merchant"]
         edited.add("merchant")
+    if "merchant_name" in patch and patch["merchant_name"] != receipt.merchant_name:
+        receipt.merchant_name = patch["merchant_name"]
+        edited.add("merchant_name")
     if "purchase_at" in patch and patch["purchase_at"] != receipt.purchase_at:
         receipt.purchase_at = patch["purchase_at"]
         edited.add("purchase_at")

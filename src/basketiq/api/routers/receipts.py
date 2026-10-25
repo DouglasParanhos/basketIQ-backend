@@ -22,6 +22,7 @@ from basketiq.api.schemas import (
     LineOut,
     MerchantChoiceIn,
     OriginalUrlOut,
+    PhotoAddIn,
     PresignedUploadOut,
     ProcessIn,
     ProcessingInfo,
@@ -89,6 +90,7 @@ def requirements(settings: Settings) -> FileRequirements:
         max_bytes=settings.upload_max_bytes,
         accepted_types=sorted(ALLOWED_MIMES),
         max_pdf_pages=settings.pdf_max_pages,
+        max_photos=settings.upload_max_photos,
     )
 
 
@@ -127,13 +129,48 @@ def upload_init(
 @router.post(
     "/{receipt_id}/upload-url",
     response_model=PresignedUploadOut,
-    summary="New upload URL after a failed upload",
+    summary="New upload URL after a failed upload (position 0 is the first photo)",
 )
 @translate_errors
 def renew_upload_url(
-    receipt_id: uuid.UUID, db: Db, settings: SettingsDep, storage: Storage, user: ConsentedUser
+    receipt_id: uuid.UUID,
+    db: Db,
+    settings: SettingsDep,
+    storage: Storage,
+    user: ConsentedUser,
+    position: Annotated[int, Query(ge=0, le=20)] = 0,
 ) -> PresignedUploadOut:
-    up = svc.new_upload_url(db, settings, storage, user, receipt_id)
+    up = svc.new_upload_url(db, settings, storage, user, receipt_id, position)
+    return PresignedUploadOut(url=up.url, fields=up.fields, expires_at=up.expires_at)
+
+
+@router.post(
+    "/{receipt_id}/photos",
+    response_model=PresignedUploadOut,
+    status_code=201,
+    summary="Another photo of a receipt too long for one",
+    responses={409: {"model": ErrorBody}, 422: {"model": ErrorBody}},
+)
+@translate_errors
+def add_photo(
+    receipt_id: uuid.UUID,
+    body: PhotoAddIn,
+    db: Db,
+    settings: SettingsDep,
+    storage: Storage,
+    user: ConsentedUser,
+) -> PresignedUploadOut:
+    up = svc.add_photo(
+        db,
+        settings,
+        storage,
+        user,
+        receipt_id,
+        filename=body.filename,
+        content_type=body.content_type,
+        size_bytes=body.size_bytes,
+        sha256=body.sha256,
+    )
     return PresignedUploadOut(url=up.url, fields=up.fields, expires_at=up.expires_at)
 
 
@@ -203,6 +240,8 @@ def list_receipts(
             id=r.id,
             status=ReceiptStatus(r.processing_status),
             merchant=r.merchant,
+            merchant_name=r.merchant_name,
+            store_label=r.store_label,
             purchase_at=r.purchase_at,
             total_cents=r.total_cents,
             line_count=count,
@@ -297,16 +336,20 @@ def choose_merchant(
 @router.get("/{receipt_id}/original", response_model=OriginalUrlOut)
 @translate_errors
 def original_url(
-    receipt_id: uuid.UUID, db: Db, settings: SettingsDep, storage: Storage, user: ConsentedUser
+    receipt_id: uuid.UUID,
+    db: Db,
+    settings: SettingsDep,
+    storage: Storage,
+    user: ConsentedUser,
+    photo: Annotated[int, Query(ge=1, le=20, description="Photo number, counted from 1")] = 1,
 ) -> OriginalUrlOut:
     receipt = svc.get_owned(db, user, receipt_id)
     if receipt.original_deleted_at is not None:
         raise ApiError(410, "original_deleted", "O ficheiro original foi eliminado.")
-    url = storage.presign_download(
-        receipt.object_key, settings.original_url_ttl_seconds, receipt.content_type
-    )
+    key, content_type = svc.photo_file(receipt, photo - 1)
+    url = storage.presign_download(key, settings.original_url_ttl_seconds, content_type)
     return OriginalUrlOut(
-        url=url, expires_in_seconds=settings.original_url_ttl_seconds, content_type=receipt.content_type
+        url=url, expires_in_seconds=settings.original_url_ttl_seconds, content_type=content_type
     )
 
 
@@ -385,8 +428,10 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
         error=error,
         merchant=receipt.merchant,
         merchant_hint=receipt.merchant_hint,
+        merchant_name=receipt.merchant_name,
         purchase_at=receipt.purchase_at,
         receipt_ref=receipt.receipt_ref,
+        store_label=receipt.store_label,
         currency=receipt.currency,
         source_type=receipt.source_type,
         totals=Totals(
@@ -413,6 +458,7 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
         confirmed_at=receipt.confirmed_at,
         confirmed_by=receipt.confirmed_by,
         original_available=receipt.original_deleted_at is None and status != ReceiptStatus.RECEIVED,
+        photo_count=1 + len(receipt.photos),
         original_expires_at=receipt.original_expires_at,
         original_deleted_at=receipt.original_deleted_at,
         processing=ProcessingInfo(

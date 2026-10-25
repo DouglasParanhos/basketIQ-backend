@@ -47,5 +47,9 @@ def original_key(user_id: object, receipt_id: object) -> str:
     return receipt_prefix(user_id, receipt_id) + "original"
 
 
+def photo_key(user_id: object, receipt_id: object, position: int) -> str:
+    return f"{receipt_prefix(user_id, receipt_id)}photo-{position}"
+
+
 def user_prefix(user_id: object) -> str:
     return f"users/{user_id}/"

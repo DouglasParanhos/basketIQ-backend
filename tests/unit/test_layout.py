@@ -67,6 +67,27 @@ def test_rows_are_kept_apart_when_the_paper_curls() -> None:
     assert got[-8:] == EXPECTED
 
 
+def test_reported_angles_that_do_not_match_the_rows_are_not_trusted() -> None:
+    """The prices already sit on the row of their description, but the OCR reports a tilt that would
+    move each one next to its neighbour: the alignment of the amounts decides, not the angle."""
+    rows = [
+        ("ROLO GIGANTE", "2,90"),
+        ("PAPEL HIGIENICO", "3,05"),
+        ("GEL COCO", "1,60"),
+        ("LUVAS LATEX", "3,00"),
+    ] * 6
+    tokens = []
+    for i, (left, right) in enumerate(rows):
+        for text, x0, x1 in ((left, 1200, 1500), (right, 1760, 1840)):
+            centre = 1000 + i * 46  # rows 46 apart, as on the photographed Mercadona receipt
+            tokens.append(
+                TextToken(text=text, x0=x0, x1=x1, y0=centre - HEIGHT / 2, y1=centre + HEIGHT / 2, slope=0.06)
+            )
+    got = texts(tokens)
+    # The first and last rows have too few amounts around them to be judged, only the stretch in between.
+    assert {f"{left} {right}" for left, right in rows[8:16]} <= set(got)
+
+
 def test_flat_pdf_words_are_untouched() -> None:
     words = [
         TextToken(text=w, x0=10 + 40 * i, x1=40 + 40 * i, y0=row * 12, y1=row * 12 + 9)

@@ -9,15 +9,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from basketiq.domain.reconciliation import Reconciliation, reconcile
 from basketiq.domain.status import Merchant
 from basketiq.pipeline.schema import ReviewReason
 
 # Reasons that also prevent a *user* confirmation: values are missing, not merely uncertain.
-BLOCKING_CODES = frozenset(
-    {"merchant_unknown", "date_missing", "quantity_pending", "line_total_missing", "no_lines"}
-)
+# An unknown store does not block: a purchase at a corner shop is a purchase like any other.
+BLOCKING_CODES = frozenset({"date_missing", "quantity_pending", "line_total_missing", "no_lines"})
 
 
 @dataclass
@@ -53,6 +53,8 @@ class ReceiptView:
     edited_fields: frozenset[str] = frozenset()
     duplicate_suspected: bool = False
     merchant_hint_conflict: bool = False
+    # What was done to join the photos of one receipt: {"photo", "overlap", "removed"} per pair of photos.
+    join_notes: list[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -76,6 +78,28 @@ def _effective(conf: dict[str, float], name: str, edited: frozenset[str]) -> flo
     return 1.0 if name in edited else conf.get(name, 0.0)
 
 
+def _join_reason(note: dict[str, Any]) -> ReviewReason:
+    first, second = note["photo"], note["photo"] + 1
+    if note["overlap"] == 0:
+        return ReviewReason(
+            code="photos_no_overlap",
+            message=(
+                f"Não encontrámos linhas em comum entre a foto {first} e a foto {second}: "
+                "pode faltar uma parte da nota."
+            ),
+            details=dict(note),
+        )
+    removed = "; ".join(note["removed"])
+    return ReviewReason(
+        code="photos_joined",
+        message=(
+            f"Juntámos a foto {first} e a foto {second} e removemos {len(note['removed'])} linhas "
+            f"repetidas ou cortadas: {removed}. Se alguma era uma compra repetida, acrescente-a."
+        ),
+        details=dict(note),
+    )
+
+
 def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
     reasons: list[ReviewReason] = []
     line_flags: dict[int, list[str]] = {}
@@ -83,7 +107,11 @@ def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
 
     if view.merchant in (None, Merchant.UNKNOWN):
         reasons.append(
-            ReviewReason(code="merchant_unknown", field="merchant", message="Escolha o supermercado.")
+            ReviewReason(
+                code="merchant_unknown",
+                field="merchant",
+                message="Loja não reconhecida: confirme o nome e reveja as linhas.",
+            )
         )
     elif view.merchant_hint_conflict and "merchant" not in view.edited_fields:
         reasons.append(
@@ -193,6 +221,9 @@ def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
                 },
             )
         )
+
+    for note in view.join_notes:
+        reasons.append(_join_reason(note))
 
     if view.duplicate_suspected:
         reasons.append(

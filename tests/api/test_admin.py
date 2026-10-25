@@ -68,7 +68,15 @@ def test_admin_metrics_and_merchant_config(
     assert m["lines_confirmed_without_change_pct"] == 100.0
 
     configs = admin.get("/v1/admin/merchants").json()
-    assert {c["merchant"] for c in configs} == {"CONTINENTE", "PINGO_DOCE", "LIDL", "AUCHAN"}
+    assert {c["merchant"] for c in configs} == {
+        "CONTINENTE",
+        "PINGO_DOCE",
+        "LIDL",
+        "AUCHAN",
+        "ALDI",
+        "MERCADONA",
+        "EL_CORTE_INGLES",
+    }
     updated = admin.put(
         "/v1/admin/merchants/PINGO_DOCE", json={"field_thresholds": {"quantity": 0.95}}
     ).json()

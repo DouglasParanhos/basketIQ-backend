@@ -91,9 +91,10 @@ def test_pending_quantity_blocks_confirmation() -> None:
 
 
 @pytest.mark.req("F-10")
-def test_unknown_merchant_and_missing_date_are_blocking() -> None:
+def test_unknown_merchant_is_reviewed_but_does_not_block_a_missing_date_does() -> None:
     ev = evaluate(view(merchant="UNKNOWN", purchase_at=None), Thresholds())
-    assert {"merchant_unknown", "date_missing"} <= {r.code for r in ev.blocking}
+    assert "merchant_unknown" in {r.code for r in ev.reasons}
+    assert {r.code for r in ev.blocking} == {"date_missing"}
 
 
 @pytest.mark.req("F-17")

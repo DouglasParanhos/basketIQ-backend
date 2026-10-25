@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     upload_url_ttl_seconds: int = 600
     original_url_ttl_seconds: int = 60
     pdf_max_pages: int = 5
+    upload_max_photos: int = 6  # photos of one long receipt
     abandoned_upload_hours: int = 24
 
     # Extraction / decision rules

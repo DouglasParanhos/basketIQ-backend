@@ -101,6 +101,10 @@ def process_job(
 
         try:
             data = storage.get(receipt.object_key, settings.upload_max_bytes)
+            extra = [
+                (storage.get(photo.object_key, settings.upload_max_bytes), photo.content_type)
+                for photo in receipt.photos
+            ]
         except ObjectNotFoundError:
             _fail(db, job, receipt, ReceiptStatus.PERMANENT_FAILURE, "original_missing")
             return
@@ -129,6 +133,7 @@ def process_job(
             declared_mime=receipt.content_type,
             merchant_hint=Merchant(receipt.merchant_hint) if receipt.merchant_hint else None,
             external_requested=job.external_requested,
+            extra=extra,
         )
         try:
             outcome = run_pipeline(request, deps)
@@ -217,6 +222,9 @@ def persist_outcome(
     receipt.merchant = parsed.merchant
     receipt.purchase_at = parsed.purchase_at
     receipt.receipt_ref = parsed.receipt_ref
+    receipt.store_label = parsed.store_label
+    receipt.merchant_name = parsed.merchant_name
+    receipt.merge_notes = list(outcome.join_notes)
     receipt.subtotal_cents = parsed.subtotal_cents
     receipt.tax_cents = parsed.tax_cents
     receipt.total_cents = parsed.total_cents

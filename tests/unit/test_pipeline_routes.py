@@ -259,3 +259,31 @@ def test_dark_image_gets_quality_warning_but_is_processed() -> None:
     )
     assert "too_dark" in out.quality_warnings
     assert out.status in (ReceiptStatus.COMPLETED, ReceiptStatus.REVIEW_REQUIRED)
+
+
+def _receipt_on_a_mat(paper_width: int) -> bytes:
+    """A white strip of paper, `paper_width` pixels wide, on a dark mat."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    mat = Image.new("RGB", (paper_width * 3, paper_width * 5), (25, 25, 25))
+    ImageDraw.Draw(mat).rectangle((paper_width, 20, paper_width * 2, paper_width * 5 - 20), fill="white")
+    buf = io.BytesIO()
+    mat.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@pytest.mark.req("RF-05")
+@pytest.mark.parametrize(("paper_width", "warned"), [(240, True), (900, False)])
+def test_a_receipt_that_takes_few_pixels_of_the_photo_gets_a_resolution_warning(
+    paper_width: int, warned: bool
+) -> None:
+    out = run_pipeline(
+        PipelineRequest(_receipt_on_a_mat(paper_width), "image/png"), deps(ocr=FakeOcr(PINGO_LINES))
+    )
+    assert ("low_resolution" in out.quality_warnings) is warned
+    assert out.status in (
+        ReceiptStatus.COMPLETED,
+        ReceiptStatus.REVIEW_REQUIRED,
+    )  # a warning, never a rejection

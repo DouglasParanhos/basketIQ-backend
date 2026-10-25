@@ -26,6 +26,7 @@ from basketiq.pipeline.parsers.base import (
     build_item,
     choose_purchase_datetime,
     find_amount,
+    is_weight_quantity,
     parse_date_candidates,
     parse_tax_table,
     unresolved_line,
@@ -34,7 +35,7 @@ from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt
 
 UNCALIBRATED = 0.85
 
-_ITEM = re.compile(rf"^(?P<desc>.*?[A-Za-zÀ-ÿ].*?)\s+(?P<total>-?{MONEY})\s+(?P<tax>[A-E])$")
+_ITEM = re.compile(rf"^(?P<desc>.*?[A-Za-zÀ-ÿ].*?)\s+(?P<total>-?{MONEY})\s+(?P<tax>[A-F])$")
 _QTY = re.compile(
     rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?P<kg>kg)?\s*[xX]\s*(?P<unit>{MONEY})(?:\s*EUR/kg)?"
     rf"(?:\s+(?P<total>{MONEY})\s+(?P<tax>[A-E]))?$"
@@ -44,6 +45,7 @@ _DISCOUNT = re.compile(
     re.I,
 )
 _TOTAL = re.compile(rf"^Total\s+(?P<amount>{MONEY})$", re.I)
+_STORE = re.compile(r"^LIDL\b.*?\s-\s(?P<store>.+)$", re.I)
 _REF = re.compile(r"\bNo\s*:\s*(?P<ref>F[STR]\s*[\w/]+)", re.I)
 
 
@@ -133,6 +135,9 @@ class LidlParser:
             merchant=self.merchant,
             purchase_at=purchase_at,
             receipt_ref=ref,
+            store_label=next(
+                (m.group("store") for line in lines[:end] if (m := _STORE.match(line.text.strip()))), None
+            ),
             subtotal_cents=subtotal,
             tax_cents=tax,
             total_cents=total,
@@ -155,7 +160,7 @@ def _apply_quantity(
     if qty is None or unit_price is None:
         return
     item.quantity = qty
-    item.unit = Unit.KG if is_kg or "," in qty_text or "." in qty_text else Unit.UNIT
+    item.unit = Unit.KG if is_weight_quantity(qty_text, is_kg) else Unit.UNIT
     item.unit_price_cents = unit_price
     consistent = (
         item.line_total_cents is not None

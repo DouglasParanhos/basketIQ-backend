@@ -35,6 +35,7 @@ class FileRequirements(BaseModel):
     max_bytes: int
     accepted_types: list[str]
     max_pdf_pages: int
+    max_photos: int
 
 
 class UploadInitIn(BaseModel):
@@ -44,6 +45,13 @@ class UploadInitIn(BaseModel):
     sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
     merchant_hint: Merchant | None = None
     allow_duplicate: bool = False
+
+
+class PhotoAddIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(max_length=64)
+    size_bytes: int = Field(gt=0)
+    sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
 
 
 class PresignedUploadOut(BaseModel):
@@ -143,8 +151,10 @@ class ReceiptOut(BaseModel):
     error: ErrorInfo | None
     merchant: str | None
     merchant_hint: str | None
+    merchant_name: str | None
     purchase_at: datetime | None
     receipt_ref: str | None
+    store_label: str | None
     currency: str
     source_type: str
     totals: Totals
@@ -160,6 +170,7 @@ class ReceiptOut(BaseModel):
     confirmed_at: datetime | None
     confirmed_by: str | None
     original_available: bool
+    photo_count: int
     original_expires_at: datetime | None
     original_deleted_at: datetime | None
     processing: ProcessingInfo | None
@@ -172,6 +183,8 @@ class ReceiptSummaryOut(BaseModel):
     id: uuid.UUID
     status: ReceiptStatus
     merchant: str | None
+    merchant_name: str | None
+    store_label: str | None
     purchase_at: datetime | None
     total_cents: int | None
     line_count: int
@@ -205,9 +218,15 @@ class LinePatchIn(BaseModel):
 class ReceiptPatchIn(BaseModel):
     version: int
     merchant: Merchant | None = None
+    merchant_name: str | None = Field(default=None, max_length=80)
     purchase_at: datetime | None = None
     total_cents: int | None = Field(default=None, ge=0, le=100_000_000)
     lines: list[LinePatchIn] | None = Field(default=None, max_length=500)
+
+    @field_validator("merchant_name")
+    @classmethod
+    def _blank_is_none(cls, v: str | None) -> str | None:
+        return (v.strip() or None) if isinstance(v, str) else v
 
 
 class VersionIn(BaseModel):

@@ -25,6 +25,9 @@ RULE_DESCRIPTION = 0.95
 
 MONEY = r"\d{1,4}[,.]\d{2}"
 
+DEPOSIT_CENTS = 10  # current deposit per bottle in the Portuguese return scheme
+_DEPOSIT = re.compile(r"dep[oó]sito\b|vasilhame\b", re.I)
+
 
 class Parser(Protocol):
     merchant: Merchant
@@ -114,8 +117,7 @@ def build_item(
     if qty_text is not None and unit_price_text is not None:
         qty = parse_decimal(qty_text)
         unit_price = parse_money_cents(unit_price_text)
-        # Receipts print weighed quantities with decimals ("0,513") and counts without ("2").
-        unit = weight_unit if ("," in qty_text or "." in qty_text) else Unit.UNIT
+        unit = weight_unit if is_weight_quantity(qty_text) else Unit.UNIT
         consistent = (
             qty is not None
             and unit_price is not None
@@ -148,6 +150,21 @@ def build_item(
         field_confidence={k: round(v, 3) for k, v in conf.items()},
         evidence=evidence,
     )
+
+
+def apply_deposit_quantities(lines: Iterable[ParsedLine]) -> None:
+    """Packaging deposit lines ("Depósito 0.10 0,60 F", Portuguese "Volta" scheme) print no quantity:
+    the total is bottles × DEPOSIT_CENTS. Unresolved lines are left alone, they stay in review."""
+    for line in lines:
+        if line.unresolved or line.line_total_cents is None or not _DEPOSIT.match(line.raw_description):
+            continue
+        bottles, remainder = divmod(line.line_total_cents, DEPOSIT_CENTS)
+        line.quantity = Decimal(max(bottles + (remainder * 2 >= DEPOSIT_CENTS), 1))
+        line.unit = Unit.UNIT
+        line.unit_price_cents = DEPOSIT_CENTS
+        # A total that is not a whole number of deposits is rounded but must still be reviewed.
+        conf = RULE_INCONSISTENT if remainder else line.field_confidence.get("line_total", 0.0)
+        line.field_confidence["quantity"] = line.field_confidence["unit_price"] = round(conf, 3)
 
 
 def unresolved_line(line: TextLine) -> ParsedLine:
@@ -202,6 +219,58 @@ def index_of(lines: list[TextLine], predicate: Callable[[str], bool], start: int
         if predicate(lines[i].text.strip()):
             return i
     return None
+
+
+def is_weight_quantity(qty_text: str, kg_printed: bool = False) -> bool:
+    """Weighed quantities are printed with decimals ("0,513", "1,000", "1,004 kg"), counts without ("2")."""
+    return kg_printed or "," in qty_text or "." in qty_text
+
+
+_NOT_A_STORE = re.compile(
+    r"\b(TAXA|TOTAL|IVA|NIF|NIPC|TEL|CART[AÃ]O|COMPRA|VISA|MULTIBANCO|TERMINAL|PAGAMENTO)\b", re.I
+)
+_TERMINAL = re.compile(r"^Terminal\s+Pagamento", re.I)
+
+
+def terminal_store_label(lines: list[TextLine]) -> str | None:
+    """Store name from the card-terminal block ("ALDI ARDEIRA / CHARNECA CAPARICA"), which most
+    Portuguese receipts print right above "Terminal Pagamento Automático"."""
+    anchor = index_of(lines, lambda t: bool(_TERMINAL.match(t)))
+    if anchor is None:
+        return None
+    found: list[str] = []
+    for line in reversed(lines[max(0, anchor - 2) : anchor]):
+        text = _clean_description(line.text)
+        if len(re.findall(r"[A-Za-zÀ-ÿ]", text)) < 3 or re.search(MONEY, text) or _NOT_A_STORE.search(text):
+            break
+        found.append(text)
+    return " - ".join(reversed(found)) or None
+
+
+_NOT_A_NAME = re.compile(
+    r"\b(FATURA|FACTURA|NIF|NIPC|CONTRIBUINTE|ORIGINAL|DUPLICADO|TEL|TELEFONE|CAPITAL|HOR[AÁ]RIO|SEDE|"
+    r"REGISTO|DATA|SIMPLIFICADA|OBRIGAD[OA]|DENOMINA|DESCRI)\b|WWW\.|\.PT\b|\.COM\b|\d{5,}",
+    re.I,
+)
+
+
+def guess_merchant_name(lines: list[TextLine], search: int = 8) -> str | None:
+    """Name of a store without a parser: the first header line that reads like a name."""
+    for line in lines[:search]:
+        text = _clean_description(line.text)
+        letters = len(re.findall(r"[A-Za-zÀ-ÿ]", text))
+        if letters >= 3 and letters >= 0.6 * len(text) and len(text) <= 40 and not _NOT_A_NAME.search(text):
+            return text
+    return None
+
+
+def line_before(lines: list[TextLine], predicate: Callable[[str], bool]) -> str | None:
+    """Last non-empty line before the first line satisfying `predicate`: the store name that
+    Pingo Doce and Continente print right above the company details."""
+    anchor = index_of(lines, predicate)
+    if anchor is None:
+        return None
+    return next((text for line in reversed(lines[:anchor]) if (text := _clean_description(line.text))), None)
 
 
 def _clean_description(text: str) -> str:

@@ -81,9 +81,12 @@ class Receipt(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     merchant: Mapped[str | None] = mapped_column(String(32))
     merchant_hint: Mapped[str | None] = mapped_column(String(32))
+    # Name of a store without a parser, as printed on the receipt or typed by the user.
+    merchant_name: Mapped[str | None] = mapped_column(String(80))
     purchase_at: Mapped[datetime | None]
     currency: Mapped[str] = mapped_column(String(3), default="EUR")
     receipt_ref: Mapped[str | None] = mapped_column(String(128))
+    store_label: Mapped[str | None] = mapped_column(String(255))
     source_type: Mapped[str] = mapped_column(String(8))
     content_type: Mapped[str] = mapped_column(String(64))
     size_bytes: Mapped[int] = mapped_column(BigInteger)
@@ -108,6 +111,8 @@ class Receipt(Base):
     confirmed_by: Mapped[str | None] = mapped_column(String(8))
     original_expires_at: Mapped[datetime | None]
     original_deleted_at: Mapped[datetime | None]
+    # How the photos of a long receipt were joined: one {"photo", "overlap", "removed"} per pair of photos.
+    merge_notes: Mapped[list[Any]] = mapped_column(default=list)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
@@ -117,6 +122,23 @@ class Receipt(Base):
         cascade="all, delete-orphan",
         order_by="ReceiptLine.line_number",
     )
+    # The photos after the first one (which is `object_key`), for a receipt too long for a single photo.
+    photos: Mapped[list[ReceiptPhoto]] = relationship(
+        cascade="all, delete-orphan", order_by="ReceiptPhoto.position"
+    )
+
+
+class ReceiptPhoto(Base):
+    __tablename__ = "receipt_photos"
+    __table_args__ = (UniqueConstraint("receipt_id", "position"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    receipt_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("receipts.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer)  # 1 is the second photo
+    object_key: Mapped[str] = mapped_column(String(512))
+    content_type: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    declared_hash: Mapped[str | None] = mapped_column(String(64))
 
 
 class ReceiptLine(Base):

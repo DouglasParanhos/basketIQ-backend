@@ -13,6 +13,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from PIL import Image
+
 from basketiq.domain.confidence import Evaluation, LineView, ReceiptView, Thresholds, evaluate
 from basketiq.domain.status import Merchant, ProcessingRoute, ReceiptStatus, SourceType
 from basketiq.pipeline.classify import classify
@@ -22,10 +24,12 @@ from basketiq.pipeline.llm import AmbiguityResolver, LlmUnavailableError, apply_
 from basketiq.pipeline.ocr import OcrEngine
 from basketiq.pipeline.ocr.base import OcrUnavailableError
 from basketiq.pipeline.parsers import parser_for
+from basketiq.pipeline.parsers.base import apply_deposit_quantities
 from basketiq.pipeline.pdf_text import extract_pdf_text, has_usable_text
-from basketiq.pipeline.preprocess import load_image, prepare_for_ocr, rasterize_pdf
+from basketiq.pipeline.preprocess import load_image, ocr_tiles, rasterize_pdf
 from basketiq.pipeline.quality import image_warnings, ocr_warnings
 from basketiq.pipeline.schema import DocumentText, ParsedReceipt, TextToken
+from basketiq.pipeline.stitch import JoinNote, join_documents
 from basketiq.pipeline.validation import DocumentRejectedError, validate_document
 
 log = logging.getLogger(__name__)
@@ -56,6 +60,8 @@ class PipelineRequest:
     declared_mime: str
     merchant_hint: Merchant | None = None
     external_requested: bool = False
+    # More photos of the same (long) receipt, after `data`: (bytes, declared mime) in photographing order.
+    extra: list[tuple[bytes, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -78,6 +84,7 @@ class PipelineOutcome:
     external_reason: str | None = None
     estimated_cost_cents: int = 0
     quality_warnings: list[str] = field(default_factory=list)
+    join_notes: list[JoinNote] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     stage_ms: dict[str, int] = field(default_factory=dict)
 
@@ -113,8 +120,27 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
             return out
     out.source_type, out.page_count = validated.source_type, validated.page_count
 
+    for data, mime in request.extra:
+        with stage("validate"):
+            try:
+                extra = validate_document(data, mime, deps.max_bytes, deps.max_pages)
+            except DocumentRejectedError as rejected:
+                out.status, out.error_code, out.error_message = (
+                    rejected.status,
+                    rejected.code,
+                    rejected.message,
+                )
+                return out
+        if extra.source_type != SourceType.IMAGE or validated.source_type != SourceType.IMAGE:
+            out.status, out.error_code = ReceiptStatus.INVALID_FORMAT, "photos_must_be_images"
+            out.error_message = "Só é possível juntar fotografias. Para um PDF envie apenas esse ficheiro."
+            return out
+        out.page_count += 1
+
     with stage("text"):
-        doc = _extract_text(request.data, validated.source_type, deps.ocr, out)
+        docs = [_extract_text(request.data, validated.source_type, deps.ocr, out)]
+        docs += [_extract_text(data, SourceType.IMAGE, deps.ocr, out) for data, _ in request.extra]
+        doc, out.join_notes = join_documents(docs)
 
     with stage("classify"):
         classification = classify(doc, request.merchant_hint)
@@ -128,6 +154,7 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
 
     with stage("parse"):
         parsed = parser_for(merchant).parse(doc)
+        apply_deposit_quantities(parsed.lines)
         parsed.field_confidence["merchant"] = classification.confidence
 
     if deps.resolver is not None:
@@ -144,7 +171,9 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
 
     with stage("decide"):
         thresholds = deps.thresholds_for(parsed.merchant)
-        evaluation = evaluate(view_from_parsed(parsed, out.merchant_hint_conflict), thresholds)
+        evaluation = evaluate(
+            view_from_parsed(parsed, out.merchant_hint_conflict, out.join_notes), thresholds
+        )
     out.parsed, out.evaluation = parsed, evaluation
     out.status = ReceiptStatus.REVIEW_REQUIRED if evaluation.reasons else ReceiptStatus.COMPLETED
     return out
@@ -159,12 +188,12 @@ def _extract_text(data: bytes, source_type: SourceType, ocr: OcrEngine, out: Pip
         images = rasterize_pdf(data)  # scanned PDF: no usable text layer
     else:
         images = [load_image(data)]
-        out.quality_warnings.extend(image_warnings(images[0]))
+        out.quality_warnings.extend(w for w in image_warnings(images[0]) if w not in out.quality_warnings)
 
     tokens: list[TextToken] = []
     try:
         for page, image in enumerate(images):
-            tokens.extend(ocr.recognize(prepare_for_ocr(image), page=page))
+            tokens.extend(_recognize_page(ocr, image, page))
     except OcrUnavailableError as exc:
         raise TemporaryProcessingError("OCR unavailable") from exc
     except Exception as exc:
@@ -180,6 +209,17 @@ def _extract_text(data: bytes, source_type: SourceType, ocr: OcrEngine, out: Pip
     out.ocr_mean_confidence = round(doc.mean_confidence, 3)
     out.quality_warnings.extend(ocr_warnings(len(tokens), doc.mean_confidence))
     return doc
+
+
+def _recognize_page(ocr: OcrEngine, image: Image.Image, page: int) -> list[TextToken]:
+    """OCR one page slice by slice and put every token back at its place on the page."""
+    tokens: list[TextToken] = []
+    for tile in ocr_tiles(image):
+        for token in ocr.recognize(tile.image, page=page):
+            centre = tile.top + (token.y0 + token.y1) / 2
+            if tile.own_top <= centre < tile.own_bottom:
+                tokens.append(token.model_copy(update={"y0": token.y0 + tile.top, "y1": token.y1 + tile.top}))
+    return tokens
 
 
 def _resolve_ambiguities(parsed: ParsedReceipt, resolver: AmbiguityResolver, out: PipelineOutcome) -> None:
@@ -236,8 +276,11 @@ def _maybe_external(
     return parsed
 
 
-def view_from_parsed(parsed: ParsedReceipt, hint_conflict: bool) -> ReceiptView:
+def view_from_parsed(
+    parsed: ParsedReceipt, hint_conflict: bool, join_notes: list[JoinNote] | None = None
+) -> ReceiptView:
     return ReceiptView(
+        join_notes=list(join_notes or []),
         merchant=parsed.merchant,
         purchase_at=parsed.purchase_at,
         total_cents=parsed.total_cents,

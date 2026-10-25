@@ -8,10 +8,21 @@ class Merchant(StrEnum):
     PINGO_DOCE = "PINGO_DOCE"
     LIDL = "LIDL"
     AUCHAN = "AUCHAN"
+    ALDI = "ALDI"
+    MERCADONA = "MERCADONA"
+    EL_CORTE_INGLES = "EL_CORTE_INGLES"
     UNKNOWN = "UNKNOWN"
 
 
-SUPPORTED_MERCHANTS = (Merchant.CONTINENTE, Merchant.PINGO_DOCE, Merchant.LIDL, Merchant.AUCHAN)
+SUPPORTED_MERCHANTS = (
+    Merchant.CONTINENTE,
+    Merchant.PINGO_DOCE,
+    Merchant.LIDL,
+    Merchant.AUCHAN,
+    Merchant.ALDI,
+    Merchant.MERCADONA,
+    Merchant.EL_CORTE_INGLES,
+)
 
 
 class SourceType(StrEnum):
@@ -61,7 +72,7 @@ PROCESSABLE_STATUSES = frozenset(
 ERROR_ACTIONS: dict[ReceiptStatus, str] = {
     ReceiptStatus.INVALID_FORMAT: "Escolha um PDF, JPEG, PNG ou HEIC válido dentro dos limites indicados.",
     ReceiptStatus.UNREADABLE: "Tire uma nova fotografia com boa luz, a nota inteira visível e sem reflexos.",
-    ReceiptStatus.UNSUPPORTED_MERCHANT: "Só são suportadas notas de Continente, Pingo Doce, Lidl e Auchan.",
+    ReceiptStatus.UNSUPPORTED_MERCHANT: "As notas deste supermercado não estão disponíveis de momento.",
     ReceiptStatus.TEMPORARY_FAILURE: "Ocorreu uma falha temporária. Tente processar novamente.",
     ReceiptStatus.PERMANENT_FAILURE: (
         "Não foi possível processar este documento. Elimine-o e tente outro ficheiro."

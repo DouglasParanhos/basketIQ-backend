@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from basketiq.domain.status import Merchant, ProcessingRoute
 
 _SPLIT_AMOUNT = re.compile(r"(\d),\s+(\d{2})(?!\d)")
+AMOUNT_TOKEN = re.compile(r"^\(?-?\d{1,4}[,.]\d{2}(?!\d)")
 
 
 class TextToken(BaseModel):
@@ -39,8 +40,22 @@ class TextLine(BaseModel):
         return _SPLIT_AMOUNT.sub(r"\1,\2", joined)
 
     @property
+    def value_tokens(self) -> list[TextToken]:
+        """The tokens that carry a value. A stray "-" or the VAT class printed after an amount ("B", "D")
+        says nothing about the description or the prices, and a misread one must not flag the line."""
+        amounts = [t for t in self.tokens if AMOUNT_TOKEN.match(t.text.strip())]
+        first_amount = min((t.x0 for t in amounts), default=None)
+        return [
+            t
+            for t in self.tokens
+            if re.search(r"[A-Za-z0-9À-ÿ]", t.text)
+            and not (first_amount is not None and len(t.text.strip()) == 1 and t.x0 > first_amount)
+        ]
+
+    @property
     def confidence(self) -> float:
-        return min((t.confidence for t in self.tokens), default=0.0)
+        """The weakest token that carries a value."""
+        return min((t.confidence for t in self.value_tokens or self.tokens), default=0.0)
 
     @property
     def y(self) -> float:
@@ -90,6 +105,10 @@ class ParsedReceipt(BaseModel):
     merchant: Merchant
     purchase_at: datetime | None = None
     receipt_ref: str | None = None
+    # Store (branch) as printed in the header, e.g. "ESTRADA DA LUZ" or "LISBOA - AV.LUSIADA".
+    store_label: str | None = None
+    # Only for merchants without a parser: the name guessed from the header.
+    merchant_name: str | None = None
     subtotal_cents: int | None = None
     tax_cents: int | None = None
     total_cents: int | None = None

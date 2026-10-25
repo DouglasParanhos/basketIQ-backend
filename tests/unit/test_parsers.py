@@ -9,8 +9,13 @@ import pytest
 from basketiq.domain.status import Merchant
 from basketiq.pipeline.classify import classify
 from basketiq.pipeline.parsers import parser_for
-from basketiq.pipeline.parsers.base import choose_purchase_datetime, parse_date_candidates
+from basketiq.pipeline.parsers.base import (
+    apply_deposit_quantities,
+    choose_purchase_datetime,
+    parse_date_candidates,
+)
 from basketiq.pipeline.parsers.generic_pt import CONFIDENCE_CAP
+from basketiq.pipeline.schema import ParsedLine
 from tests.helpers import PINGO_LINES, PINGO_TOTAL, doc_from_lines
 
 LISBON = ZoneInfo("Europe/Lisbon")
@@ -89,6 +94,59 @@ def test_lidl_quantity_and_discount_lines() -> None:
     assert tomato.discount_cents == 50
     assert parsed.total_cents == 520
     assert parsed.purchase_at == datetime(2026, 9, 12, 10, 15, tzinfo=LISBON)
+
+
+@pytest.mark.req("RF-06")
+@pytest.mark.parametrize(
+    ("total", "quantity", "low_confidence"), [("0,10", 1, False), ("0,60", 6, False), ("0,25", 3, True)]
+)
+def test_lidl_deposit_quantity_is_total_over_ten_cents(
+    total: str, quantity: int, low_confidence: bool
+) -> None:
+    lines = ["LIDL & Cia", "EUR", f"Deposito 0.10 {total} F", f"Total {total}"]
+    parsed = parser_for(Merchant.LIDL).parse(doc_from_lines(lines))
+    apply_deposit_quantities(parsed.lines)
+    deposit = parsed.lines[0]
+    assert not deposit.unresolved
+    assert (deposit.quantity, deposit.unit, deposit.unit_price_cents) == (Decimal(quantity), "un", 10)
+    assert (deposit.field_confidence["quantity"] < 0.8) is low_confidence
+
+
+@pytest.mark.req("RF-06")
+def test_deposit_rule_ignores_other_lines_and_unresolved_ones() -> None:
+    parsed = parser_for(Merchant.PINGO_DOCE).parse(
+        doc_from_lines(["Artigos", " C LEITE 0,79", "Resumo", "TOTAL A PAGAR 0,79"])
+    )
+    milk = parsed.lines[0]
+    before = milk.model_copy(deep=True)
+    unresolved = ParsedLine(raw_description="Depósito ?? 0,60", line_total_cents=60, unresolved=True)
+    apply_deposit_quantities([milk, unresolved])
+    assert milk == before
+    assert unresolved.quantity is None
+
+
+@pytest.mark.req("RF-06")
+@pytest.mark.parametrize(
+    ("merchant", "lines", "store"),
+    [
+        (Merchant.LIDL, ["LIDL & Cia - LISBOA - AV.LUSIADA", "EUR", "Total 0,00"], "LISBOA - AV.LUSIADA"),
+        (Merchant.LIDL, ["LIDL & Cia", "EUR", "Total 0,00"], None),
+        (
+            Merchant.PINGO_DOCE,
+            ["ESTRADA DA LUZ", "Tel.: 210000000", "Pingo Doce - Distribuição Alimentar, S.A.", "Artigos"],
+            "ESTRADA DA LUZ",
+        ),
+        (
+            Merchant.CONTINENTE,
+            ["BD Defensores Chaves", "Modelo Continente Hipermercados, SA", "IVA DESCRICAO VALOR"],
+            "BD Defensores Chaves",
+        ),
+        (Merchant.CONTINENTE, ["Modelo Continente Hipermercados, SA", "IVA DESCRICAO VALOR"], None),
+        (Merchant.AUCHAN, ["Loja Exemplo", "AUCHAN RETAIL PORTUGAL, S.A."], None),
+    ],
+)
+def test_store_label_is_read_from_the_header(merchant: Merchant, lines: list[str], store: str | None) -> None:
+    assert parser_for(merchant).parse(doc_from_lines(lines)).store_label == store
 
 
 CONTINENTE_LINES = [

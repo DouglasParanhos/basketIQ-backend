@@ -5,13 +5,19 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
+from basketiq.pipeline.preprocess import crop_to_paper
+
 BLUR_VARIANCE_MIN = 60.0
 DARK_MEAN_MAX = 70.0
 MIN_TOKENS = 15
 LOW_OCR_CONFIDENCE = 0.75
+MIN_PAPER_WIDTH = 600  # pixels the receipt itself must span for the small print to be readable
 
 WARNING_MESSAGES = {
     "blurry": "A imagem parece desfocada.",
+    "low_resolution": (
+        "A nota ocupa pouco da imagem. Aproxime-se da nota ou use a câmara em vez de reduzir a imagem."
+    ),
     "too_dark": "A imagem está demasiado escura.",
     "low_text": "Foi encontrado pouco texto; a nota pode estar cortada.",
     "low_ocr_confidence": "Parte do texto foi lida com pouca confiança.",
@@ -25,6 +31,8 @@ def image_warnings(image: Image.Image) -> list[str]:
     warnings: list[str] = []
     if _laplacian_variance(arr) < BLUR_VARIANCE_MIN:
         warnings.append("blurry")
+    if crop_to_paper(image).width < MIN_PAPER_WIDTH:
+        warnings.append("low_resolution")
     if float(arr.mean()) < DARK_MEAN_MAX:
         warnings.append("too_dark")
     return warnings

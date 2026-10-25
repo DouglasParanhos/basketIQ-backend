@@ -329,7 +329,7 @@
         "tags": [
           "receipts"
         ],
-        "summary": "New upload URL after a failed upload",
+        "summary": "New upload URL after a failed upload (position 0 is the first photo)",
         "operationId": "renew_upload_url_v1_receipts__receipt_id__upload_url_post",
         "parameters": [
           {
@@ -340,6 +340,18 @@
               "type": "string",
               "format": "uuid",
               "title": "Receipt Id"
+            }
+          },
+          {
+            "name": "position",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 0,
+              "default": 0,
+              "title": "Position"
             }
           }
         ],
@@ -393,6 +405,99 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/receipts/{receipt_id}/photos": {
+      "post": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Another photo of a receipt too long for one",
+        "operationId": "add_photo_v1_receipts__receipt_id__photos_post",
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Receipt Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoAddIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignedUploadOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
         }
       }
@@ -1154,6 +1259,20 @@
               "format": "uuid",
               "title": "Receipt Id"
             }
+          },
+          {
+            "name": "photo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "description": "Photo number, counted from 1",
+              "default": 1,
+              "title": "Photo"
+            },
+            "description": "Photo number, counted from 1"
           }
         ],
         "responses": {
@@ -2403,13 +2522,18 @@
           "max_pdf_pages": {
             "type": "integer",
             "title": "Max Pdf Pages"
+          },
+          "max_photos": {
+            "type": "integer",
+            "title": "Max Photos"
           }
         },
         "type": "object",
         "required": [
           "max_bytes",
           "accepted_types",
-          "max_pdf_pages"
+          "max_pdf_pages",
+          "max_photos"
         ],
         "title": "FileRequirements"
       },
@@ -2855,6 +2979,9 @@
           "PINGO_DOCE",
           "LIDL",
           "AUCHAN",
+          "ALDI",
+          "MERCADONA",
+          "EL_CORTE_INGLES",
           "UNKNOWN"
         ],
         "title": "Merchant"
@@ -3123,6 +3250,39 @@
           "content_type"
         ],
         "title": "OriginalUrlOut"
+      },
+      "PhotoAddIn": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "content_type": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Size Bytes"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "title": "Sha256"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "content_type",
+          "size_bytes",
+          "sha256"
+        ],
+        "title": "PhotoAddIn"
       },
       "PresignedUploadOut": {
         "properties": {
@@ -3629,6 +3789,17 @@
             ],
             "title": "Merchant Hint"
           },
+          "merchant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Name"
+          },
           "purchase_at": {
             "anyOf": [
               {
@@ -3651,6 +3822,17 @@
               }
             ],
             "title": "Receipt Ref"
+          },
+          "store_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Label"
           },
           "currency": {
             "type": "string",
@@ -3756,6 +3938,10 @@
             "type": "boolean",
             "title": "Original Available"
           },
+          "photo_count": {
+            "type": "integer",
+            "title": "Photo Count"
+          },
           "original_expires_at": {
             "anyOf": [
               {
@@ -3812,8 +3998,10 @@
           "error",
           "merchant",
           "merchant_hint",
+          "merchant_name",
           "purchase_at",
           "receipt_ref",
+          "store_label",
           "currency",
           "source_type",
           "totals",
@@ -3829,6 +4017,7 @@
           "confirmed_at",
           "confirmed_by",
           "original_available",
+          "photo_count",
           "original_expires_at",
           "original_deleted_at",
           "processing",
@@ -3881,6 +4070,18 @@
                 "type": "null"
               }
             ]
+          },
+          "merchant_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Name"
           },
           "purchase_at": {
             "anyOf": [
@@ -3967,6 +4168,28 @@
             ],
             "title": "Merchant"
           },
+          "merchant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Name"
+          },
+          "store_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Label"
+          },
           "purchase_at": {
             "anyOf": [
               {
@@ -4020,6 +4243,8 @@
           "id",
           "status",
           "merchant",
+          "merchant_name",
+          "store_label",
           "purchase_at",
           "total_cents",
           "line_count",

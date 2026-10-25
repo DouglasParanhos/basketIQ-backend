@@ -32,6 +32,7 @@ from basketiq.pipeline.parsers.base import (
     choose_purchase_datetime,
     find_amount,
     index_of,
+    line_before,
     parse_date_candidates,
     unresolved_line,
 )
@@ -77,6 +78,7 @@ class AuchanParser:
             merchant=self.merchant,
             purchase_at=purchase_at,
             receipt_ref=ref,
+            store_label=line_before(lines, lambda t: t.lower().startswith("tel")),
             subtotal_cents=subtotal,
             tax_cents=tax,
             total_cents=total,

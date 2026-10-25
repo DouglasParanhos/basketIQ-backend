@@ -39,6 +39,22 @@ _SIGNALS: dict[Merchant, list[tuple[re.Pattern[str], float, bool]]] = {
         (re.compile(r"AUCHAN\.PT"), 0.6, False),
         (re.compile(r"503\s?003\s?808"), 0.95, False),  # NIF of Auchan Retail Portugal printed on the receipt
     ],
+    Merchant.ALDI: [
+        (re.compile(r"\bALDI\b"), 0.9, True),
+        (re.compile(r"ALDI\.PT"), 0.6, False),
+        (re.compile(r"516\s?245\s?708"), 0.95, False),  # NIF of ALDI Retail printed on the receipt
+    ],
+    Merchant.MERCADONA: [
+        (re.compile(r"\bMERCADONA\b"), 0.9, True),
+        (re.compile(r"IRMADONA\s+SUPERMERCADOS"), 0.9, False),  # company name
+        (re.compile(r"514\s?038\s?942"), 0.95, False),  # NIF of Irmadona Supermercados
+    ],
+    Merchant.EL_CORTE_INGLES: [
+        (re.compile(r"EL\s+CORTE\s+INGLES"), 0.9, True),
+        (re.compile(r"ELCORTEINGLES\.PT"), 0.6, False),
+        # NIF, printed 501.810.285; the OCR reads the zero as the letter O
+        (re.compile(r"501[\s.]?81[0O][\s.]?285"), 0.95, False),
+    ],
 }
 
 

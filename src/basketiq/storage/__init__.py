@@ -9,6 +9,7 @@ from basketiq.storage.base import (
     PresignedUpload,
     StorageUnavailableError,
     original_key,
+    photo_key,
     receipt_prefix,
     user_prefix,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "StorageUnavailableError",
     "get_storage",
     "original_key",
+    "photo_key",
     "receipt_prefix",
     "user_prefix",
 ]
