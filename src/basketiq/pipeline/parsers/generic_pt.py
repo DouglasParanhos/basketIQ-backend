@@ -33,6 +33,7 @@ from collections import Counter
 from decimal import Decimal
 
 from basketiq.domain.money import multiply_cents, parse_decimal, parse_money_cents
+from basketiq.domain.normalization import normalize_key
 from basketiq.domain.status import Merchant, ProcessingRoute, Unit
 from basketiq.pipeline.parsers.base import (
     COUNT_INFERRED_CONFIDENCE,
@@ -71,7 +72,8 @@ _QTY_LINE = re.compile(
 # "1,004 kg 2,50 €/kg 2,51 B", "0,298 kg x 1,99 €/kg 0,59 € 1": quantity, unit price and total, under a
 # description-only line or after the description when the OCR joined them ("CURGETE 0,444 kg x ...")
 _WEIGHED_LINE = re.compile(
-    rf"^(?:(?P<desc>.*?[A-Za-zÀ-ÿ]{{2}}.*?)\s+)?(?P<qty>\d+[,.]\d{{1,3}})\s*k[g90]\s*[xX×]?\s*(?P<unit>{MONEY}){_EURO}"
+    rf"^(?:(?P<desc>.*?[A-Za-zÀ-ÿ]{{2}}.*?)\s+)?(?P<qty>\d+[,.]\d{{1,3}})\s*k[g90]\s*[xX×]?\s*(?P<unit>{MONEY})"
+    rf"(?P<cur>\s*(?:€|EUR|[eE](?=\s*/)))?"  # the OCR may read the euro sign of "€/kg" as a lone "e"
     rf"\s*/\s*k[g90]\s+(?P<total>{MONEY}){_EURO}{_TAX}$",
     re.I,
 )
@@ -169,6 +171,7 @@ class GenericPtParser:
         pending_tax: str | None = None  # the "(A)" printed before that description
         pending_amount: TextLine | None = None  # a price alone on its row, waiting for its description
         pending_saving: tuple[int, float] | None = None  # a saving printed before its item (see below)
+        pending_weighed: tuple[re.Match[str], TextLine] | None = None  # a weighed line whose name comes next
         savings_first = _savings_first(zone)
 
         def add(item: ParsedLine) -> None:
@@ -184,8 +187,23 @@ class GenericPtParser:
                 parsed.append(unresolved_line(pending_amount))
                 pending_amount = None
 
-        for line in zone:
+        def flush_weighed() -> None:  # no name came for it: left for review
+            nonlocal pending_weighed
+            if pending_weighed is not None:
+                parsed.append(unresolved_line(pending_weighed[1]))
+                pending_weighed = None
+
+        for n, line in enumerate(zone):
             text = _text(line)
+            if pending_weighed is not None:
+                nxt = _text(zone[n + 1]) if n + 1 < len(zone) else ""
+                own_prices = _is_qty_total(nxt) or bool(_QTY_LINE.match(nxt))  # the name of another item
+                if _names_a_product(text) and not own_prices:
+                    wm, wline = pending_weighed
+                    pending_weighed = None
+                    add(_weighed_item(wm, text, min(wline.confidence, line.confidence), [_text(wline), text]))
+                    continue
+                flush_weighed()
             if _CATEGORY.match(text):  # a section title: it names no product
                 flush_amount()
                 pending_description = pending_tax = None
@@ -199,19 +217,14 @@ class GenericPtParser:
                 continue
             if m := _WEIGHED_LINE.match(text):
                 description = m.group("desc") or pending_description
-                if description:
-                    add(
-                        build_item(
-                            description=description,
-                            total_text=m.group("total"),
-                            qty_text=m.group("qty"),
-                            unit_price_text=m.group("unit"),
-                            weight_unit=Unit.KG,
-                            unit_printed=True,  # the weighed line says kg
-                            line_conf=line.confidence,
-                            evidence=[description, text],
-                        )
-                    )
+                if (m.group("cur") or "").strip() in ("e", "E") and not _weight_closes(m):
+                    parsed.append(
+                        unresolved_line(line)
+                    )  # "e/kg" is a euro sign only if the arithmetic agrees
+                elif description:
+                    add(_weighed_item(m, description, line.confidence, [description, text]))
+                elif _weight_closes(m):
+                    pending_weighed = (m, line)  # the name is the next row; without it, it is left for review
                 else:
                     parsed.append(unresolved_line(line))
                 pending_description = pending_tax = None
@@ -273,7 +286,21 @@ class GenericPtParser:
                     pending_description = description
                     pending_tax = tagged.group("tax") if tagged else None
         flush_amount()
+        flush_weighed()
         return parsed
+
+
+def _weighed_item(m: re.Match[str], description: str, line_conf: float, evidence: list[str]) -> ParsedLine:
+    return build_item(
+        description=description,
+        total_text=m.group("total"),
+        qty_text=m.group("qty"),
+        unit_price_text=m.group("unit"),
+        weight_unit=Unit.KG,
+        unit_printed=True,  # the weighed line says kg
+        line_conf=line_conf,
+        evidence=evidence,
+    )
 
 
 def _item_with_lost_count(
@@ -340,8 +367,36 @@ def _cut_prefix(line: TextLine, size: int) -> TextLine:
     return line.model_copy(update={"tokens": tokens})
 
 
+_DISCOUNT_WORDS = {"DESCONTO": "Desconto", "POUPANCA": "Poupança", "PROMOCAO": "Promoção", "CUPAO": "Cupão"}
+_MIN_TOLERATED = 6  # letters: a shorter word ("Vale") is too close to others to forgive a misread letter
+_NEGATIVE_AMOUNT = re.compile(rf"(?:[(-]\s*{MONEY}\s*\)?|{MONEY}\s*-)\s*(?:€|EUR)?$")
+
+
+def _one_letter_apart(a: str, b: str) -> bool:
+    if a == b or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
+    short, long = sorted((a, b), key=len)
+    return any(long[:i] + long[i + 1 :] == short for i in range(len(long)))
+
+
+def _with_discount_word(text: str) -> str:
+    """ "CESCONTO 0.22-€": the discount word with one letter misread, at the start of a line that ends in a
+    negative amount, is the word it was. Without the negative amount nothing changes."""
+    word, _, rest = text.partition(" ")
+    if not _NEGATIVE_AMOUNT.search(rest):  # the cheap test first: nearly every line is not a discount
+        return text
+    key = normalize_key(word)
+    if len(key) < _MIN_TOLERATED:
+        return text
+    known = next((w for w in _DISCOUNT_WORDS if _one_letter_apart(key, w)), None)
+    return f"{_DISCOUNT_WORDS[known]} {rest}" if known else text
+
+
 def _saving(text: str) -> int | None:
     """The amount of a saving line ("Poupança Imediata (0,60)", "DESCONTO 0,46-€", "POUPANCA 4,00")."""
+    text = _with_discount_word(text)
     if m := _DISCOUNT.match(text):
         return abs(parse_money_cents(m.group("a1") or m.group("a2")) or 0)
     if m := _SAVING_PLAIN.match(text):
@@ -358,6 +413,21 @@ def _savings_first(zone: list[TextLine]) -> bool:
 def _apply_saving(item: ParsedLine, cents: int, confidence: float, *, cap: float) -> None:
     item.discount_cents += cents
     item.field_confidence["discount"] = cap * confidence
+
+
+def _weight_closes(m: re.Match[str]) -> bool:
+    """Weight times price per kg gives the total of a weighed line."""
+    qty, unit, total = (
+        parse_decimal(m.group("qty")),
+        parse_money_cents(m.group("unit")),
+        parse_money_cents(m.group("total")),
+    )
+    return (
+        qty is not None
+        and unit is not None
+        and total is not None
+        and abs(multiply_cents(qty, unit) - total) <= 1
+    )
 
 
 def _is_qty_total(text: str) -> bool:

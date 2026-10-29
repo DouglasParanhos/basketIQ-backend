@@ -75,3 +75,41 @@ def test_aldi_photo_nothing_resolved_is_wrong() -> None:
     resolved = [line for line in parsed.lines if not line.unresolved]
     assert len(resolved) >= 22
     assert all(line.line_total_cents and line.quantity for line in resolved)
+
+
+@pytest.mark.seen_once  # seen on 1 photo: the weighed line printed before the name of the item
+@pytest.mark.req("F-51")
+def test_aldi_photo_weighed_lines_before_their_names_give_the_items() -> None:
+    parsed = read("aldi_items")
+    (cucumber,) = by_name(parsed, "PEPINO")
+    (broccoli,) = by_name(parsed, "BROCOLOS")
+    assert (cucumber.quantity, cucumber.unit_price_cents, cucumber.line_total_cents) == (
+        Decimal("0.298"),
+        199,
+        59,
+    )
+    assert (broccoli.quantity, broccoli.unit_price_cents, broccoli.line_total_cents) == (
+        Decimal("0.720"),
+        349,
+        251,
+    )
+
+
+@pytest.mark.seen_once  # seen on 1 photo: a discount word with a letter misread
+@pytest.mark.req("F-52")
+def test_second_aldi_photo_misread_discount_word_applies_to_its_item() -> None:
+    plant = next(line for line in read("aldi2_items").lines if line.raw_description.startswith("PLANTA SAB"))
+    assert (plant.line_total_cents, plant.discount_cents) == (219, 22)
+
+
+@pytest.mark.seen_once  # seen on 1 photo: the euro sign of "€/kg" read as "e"
+@pytest.mark.req("F-53")
+def test_second_aldi_photo_e_slash_kg_resolves_and_a_single_price_with_ei_stays_for_review() -> None:
+    parsed = read("aldi2_items")
+    apple = next(line for line in parsed.lines if "PINK" in line.raw_description)
+    assert not apple.unresolved
+    assert (apple.quantity, apple.unit_price_cents, apple.line_total_cents) == (Decimal("0.586"), 299, 175)
+    onion = next(line for line in parsed.lines if line.raw_description.startswith("CEBOLA"))
+    assert (
+        onion.unresolved and onion.line_total_cents == 199
+    )  # "1,99 ei": no arithmetic can close, so reviewed

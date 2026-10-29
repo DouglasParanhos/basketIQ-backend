@@ -88,3 +88,20 @@ Só o A0. Os fluxos A1 a A7 não começam sem a linha de base e a confirmação 
   Sintéticas: 6 linhas, todas (c), por construção. Protótipos em sandbox (fora do código): caixas empilhadas na mesma coluna
   não são da mesma linha (b), −3; peso antes do nome (d), −2; «e/kg» e «ei» (f), −2; «CESCONTO» (e), −1; as quatro juntas
   34 → 25 linhas, recall OCR 85,3 → 91,5 %, precisão 91,7 → 98,3 %, correções por foto 6,0 → 4,33; PDF idêntico
+
+## A2.2 fase 2 (decisão de 2026-10-29): quatro regras pequenas, sem `ocr_table.py`
+
+- [x] T038 (commit h, parser) Peso impresso antes do nome do artigo (F-51), palavra de desconto com uma letra mal lida
+  como «CESCONTO», só no início de uma linha com montante negativo (F-52), e «e/kg» por «€/kg» (F-53). Só valem quando
+  a aritmética fecha (peso × preço/kg = total); senão a linha fica por resolver, para revisão. «Ei» por «€1» numa linha
+  de um só preço não se aceita: não há aritmética que o confirme. Todos os testes com `@pytest.mark.seen_once`
+- **Dispensado por agora: `ocr_table.py`.** Gatilho para o reabrir: se a coluna cega (`Receipts/_blind/`) mostrar falhas
+  de coluna ou de cabeçalho como causa dominante (por exemplo fotos sem cabeçalho legível)
+- **Estudo aberto, pré-processamento (causa a, 11 montantes não lidos):** um detetor com a imagem ampliada
+  (`text_det_limit_type=min`, 1500) leu os 11, o recall das linhas subiu a 92,3 %, mas o total certo caiu de 100 % para
+  66,7 % e as gralhas de descrição subiram de 12 para 23. Um detetor mais sensível piorou tudo. Não entra. **Regra de
+  projeto: nunca trocar a exatidão do total por recall de linhas**
+- **Sem mais regras de parser:** as 11 gralhas de descrição e os 11 montantes não lidos são alvo da verificação de
+  descrição (D1) e da tela de revisão (A5)
+- **Não se regista «meta atingida» com base nas 6 fotos reais:** são o conjunto em que as regras foram desenhadas. A prova
+  é a coluna cega, condição para fechar o A2.2 e abrir o A2.3 e o A3

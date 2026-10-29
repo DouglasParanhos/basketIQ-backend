@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ID = re.compile(r"\b(F-\d{2}[a-z]?|RF-\d{2}|RF-admin|SEC-[a-z]+|PT-AC-\d+|PT-\d+)\b")
 DELEGATION = re.compile(r"\*\*Verificado no Frontend\*\*:\s*(.+)")
 
-PLAN_IDS = [f"F-{n:02d}" for n in range(1, 51)] + ["F-03a", "F-15a", "F-15b", "F-22a", "F-22b"]
+PLAN_IDS = [f"F-{n:02d}" for n in range(1, 54)] + ["F-03a", "F-15a", "F-15b", "F-22a", "F-22b"]
 
 
 def _req_ids(decorator: ast.expr) -> list[str]:

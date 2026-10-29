@@ -13,6 +13,7 @@ from basketiq.domain.status import Merchant, ProcessingRoute
 from basketiq.pipeline.orchestrator import view_from_parsed
 from basketiq.pipeline.parsers import parser_for
 from basketiq.pipeline.parsers.base import COUNT_INFERRED_CONFIDENCE
+from basketiq.pipeline.parsers.generic_pt import _one_letter_apart
 from basketiq.pipeline.parsers.table import first_column_role, is_header_row
 from basketiq.pipeline.schema import ParsedReceipt
 from tests.helpers import doc_from_lines
@@ -214,3 +215,139 @@ def test_a_printed_count_is_not_reviewed_on_a_photo() -> None:
     (line,) = parsed.lines
     assert line.quantity == Decimal(3)
     assert line.field_confidence["quantity"] > COUNT_INFERRED_CONFIDENCE
+
+
+# ---- commit (h): the weight before its name, a misread discount word, "e/kg" for "€/kg" ------------------
+
+# ---- commit (h): weight before its name, a misread discount word, "e/kg" ----------------------------------
+
+
+@pytest.mark.seen_once  # seen on 1 photo: the weighed line printed before the name of the item
+@pytest.mark.req("F-51")
+def test_a_weighed_line_before_its_name_gives_the_item_when_the_arithmetic_closes() -> None:
+    parsed = parse(
+        [
+            "DENOMINACAO PRECO IVA",
+            "0,298 kg x 1,99 EUR/kg 0,59 EUR 1",
+            "PEPINO",
+            "PAO DE FORMA 1,89 EUR 1",
+            "A PAGAR 2,48 EUR",
+        ]
+    )
+    cucumber, bread = parsed.lines
+    assert (
+        cucumber.raw_description,
+        cucumber.quantity,
+        cucumber.unit_price_cents,
+        cucumber.line_total_cents,
+    ) == (
+        "PEPINO",
+        Decimal("0.298"),
+        199,
+        59,
+    )
+    assert cucumber.unit == "kg" and bread.raw_description == "PAO DE FORMA"
+
+
+@pytest.mark.seen_once  # seen on 1 photo: the weighed line printed before the name of the item
+@pytest.mark.req("F-51")
+def test_a_weighed_line_whose_arithmetic_does_not_close_is_not_given_a_name() -> None:
+    parsed = parse(
+        ["DENOMINACAO PRECO IVA", "0,298 kg x 1,99 EUR/kg 0,62 EUR 1", "PEPINO", "A PAGAR 0,62 EUR"]
+    )
+    (line,) = parsed.lines
+    assert line.unresolved and line.line_total_cents == 62  # 0,298 x 1,99 is 0,59: left for review
+    assert "PEPINO" not in [p.raw_description for p in parsed.lines]
+
+
+@pytest.mark.seen_once  # seen on 1 photo: the weighed line printed before the name of the item
+@pytest.mark.req("F-51")
+def test_a_weighed_line_is_never_given_the_name_of_another_item() -> None:
+    priced = parse(
+        [
+            "DENOMINACAO PRECO IVA",
+            "0,298 kg x 1,99 EUR/kg 0,59 EUR 1",
+            "LEITE MEIO GORDO 1,20 EUR 1",
+            "A PAGAR 1,79 EUR",
+        ]
+    )
+    weighed, milk = priced.lines
+    assert weighed.unresolved and (milk.raw_description, milk.line_total_cents) == ("LEITE MEIO GORDO", 120)
+    named = parse(
+        [
+            "DENOMINACAO PRECO IVA",
+            "0,298 kg x 1,99 EUR/kg 0,59 EUR 1",
+            "ATUM EM AZEITE",
+            "3 x 2,69 8,07",
+            "A PAGAR 8,66 EUR",
+        ]
+    )
+    weighed, tuna = named.lines  # the name has its own prices on the next row
+    assert weighed.unresolved and (tuna.raw_description, tuna.quantity, tuna.line_total_cents) == (
+        "ATUM EM AZEITE",
+        3,
+        807,
+    )
+    alone = parse(["DENOMINACAO PRECO IVA", "0,298 kg x 1,99 EUR/kg 0,59 EUR 1", "A PAGAR 0,59 EUR"])
+    assert [line.unresolved for line in alone.lines] == [True]  # no name at all
+
+
+@pytest.mark.seen_once  # seen on 1 photo: a discount word with a letter misread
+@pytest.mark.req("F-52")
+def test_a_discount_word_with_one_letter_misread_is_a_discount_when_the_amount_is_negative() -> None:
+    parsed = parse(
+        ["DENOMINACAO PRECO IVA", "PLANTA SAB MANTEIGA 2,19 EUR 1", "CESCONTO 0.22-EUR", "A PAGAR 1,97 EUR"]
+    )
+    (plant,) = parsed.lines
+    assert (plant.line_total_cents, plant.discount_cents) == (219, 22)
+
+
+@pytest.mark.seen_once  # seen on 1 photo: a discount word with a letter misread
+@pytest.mark.req("F-52")
+@pytest.mark.parametrize(
+    "row",
+    [
+        "CESCONTO 0,22 EUR",  # no negative amount: it is not a discount
+        "DESCRICAO 0,22-EUR",  # a different word, not one letter apart
+        "VALA 1,00-EUR",  # a short word is never forgiven a letter
+    ],
+)
+def test_a_word_near_the_discount_word_is_not_a_discount_without_the_rest(row: str) -> None:
+    parsed = parse(["DENOMINACAO PRECO IVA", "PLANTA SAB MANTEIGA 2,19 EUR 1", row, "A PAGAR 2,41 EUR"])
+    assert parsed.lines[0].discount_cents == 0
+
+
+@pytest.mark.seen_once  # seen on 1 photo: a discount word with a letter misread
+@pytest.mark.req("F-52")
+def test_one_letter_apart() -> None:
+    assert _one_letter_apart("CESCONTO", "DESCONTO")  # a letter read as another
+    assert _one_letter_apart("DESCONTOS", "DESCONTO")  # a letter more
+    assert _one_letter_apart("ESCONTO", "DESCONTO")  # a letter less
+    assert not _one_letter_apart("DESCONTO", "DESCONTO")  # the exact word needs no help
+    assert not _one_letter_apart("CESCONTA", "DESCONTO")  # two letters
+
+
+@pytest.mark.seen_once  # seen on 1 photo: the euro sign of "€/kg" read as "e"
+@pytest.mark.req("F-53")
+def test_e_slash_kg_is_the_euro_sign_when_weight_times_price_gives_the_total() -> None:
+    parsed = parse(["DENOMINACAO PRECO IVA", "MACA PINK 0,586 kg x 2,99 e/kg 1,75 EUR 1", "A PAGAR 1,75 EUR"])
+    (apple,) = parsed.lines
+    assert not apple.unresolved
+    assert (apple.quantity, apple.unit_price_cents, apple.line_total_cents) == (Decimal("0.586"), 299, 175)
+
+
+@pytest.mark.seen_once  # seen on 1 photo: the euro sign of "€/kg" read as "e"
+@pytest.mark.req("F-53")
+def test_e_slash_kg_is_left_for_review_when_the_arithmetic_does_not_close() -> None:
+    parsed = parse(["DENOMINACAO PRECO IVA", "MACA PINK 0,586 kg x 2,99 e/kg 2,75 EUR 1", "A PAGAR 2,75 EUR"])
+    (apple,) = parsed.lines
+    assert apple.unresolved and apple.line_total_cents == 275
+
+
+@pytest.mark.seen_once  # seen on 1 photo: the euro sign of "€/kg" read as "e"
+@pytest.mark.req("F-53")
+def test_an_e_inside_a_word_never_becomes_a_euro_sign() -> None:
+    parsed = parse(
+        ["DENOMINACAO PRECO IVA", "MACA PINK 0,586 kg x 2,99 LEITE/kg 1,75 EUR 1", "A PAGAR 1,75 EUR"]
+    )
+    assert not any(not line.unresolved and line.quantity == Decimal("0.586") for line in parsed.lines)
