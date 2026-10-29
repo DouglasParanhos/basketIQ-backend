@@ -1,8 +1,9 @@
 # Run inside WSL/Linux. Python tooling uses uv; the venv lives outside the (possibly Windows) checkout.
+# On Windows without WSL, run these commands inside containers instead (built from the Dockerfile, `test` target).
 export UV_PROJECT_ENVIRONMENT ?= $(HOME)/.venvs/basketiq
 RUN = uv run --frozen
 
-.PHONY: install up up-llm down logs migrate test test-all lint typecheck security golden golden-real traceability openapi fixtures seed-perf bench
+.PHONY: install up up-llm down logs migrate test test-all lint typecheck security golden golden-real golden-unseen traceability openapi fixtures seed-perf bench
 
 install:            ## install all dependencies (OCR + LLM extras, dev tools)
 	uv sync --frozen --all-extras
@@ -47,6 +48,10 @@ golden:             ## synthetic golden set against the committed baseline
 
 golden-real:        ## real receipts (kept outside git): make golden-real GOLDEN_REAL_DIR=../Receipts
 	GOLDEN_REAL_DIR=$(GOLDEN_REAL_DIR) $(RUN) pytest -m golden_real tests/golden
+
+golden-unseen: GOLDEN_REAL_DIR ?= ../Receipts
+golden-unseen:      ## real receipts read as if no shop had a parser (generic parser); add --force-unknown by hand
+	$(RUN) python -m basketiq.eval.golden --dir $(GOLDEN_REAL_DIR) --ocr --unseen --baseline tests/golden/baseline_unseen_A0.json
 
 traceability:       ## requirement → test matrix (fails on uncovered test-plan scenarios)
 	$(RUN) python scripts/traceability.py --out reports/traceability.md

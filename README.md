@@ -53,9 +53,24 @@ Real receipts contain personal data (NIF, card digits) and are **never committed
 GOLDEN_REAL_DIR=../Receipts`. CI uses the synthetic, anonymised set in `tests/golden/synthetic`
 (regenerate with `make fixtures`).
 
+`make golden-unseen` reads the same real receipts as if no shop had a parser, using the generic parser
+(`--unseen`). `--force-unknown` additionally makes the classifier answer UNKNOWN; today it gives results
+identical to `--unseen` (the eval uses the same thresholds for every shop and no external fallback), so it has
+no baseline of its own. It reports per
+shop, per route (PDF text vs photo OCR) and overall: line recall and precision, total and date, corrections
+per note (one edit per misread, missing or extra line), notes wrong yet not sent to review, and time. Files
+without a `.expected.json` are listed as not measured; files under `Receipts/_blind/` only run with
+`--blind`. Read the numbers with care: the sample is small, every receipt is from a calibrated chain and the
+calibrated parsers extend the generic one, so the figures are optimistic. `unreviewed_wrong` is 0 by
+design while the generic parser caps confidence at 0.6. Timings come from Docker Desktop on a developer
+machine (not 4 vCPU) and the first photo includes loading the OCR models.
+
 ## Running locally (WSL / Linux)
 
 Requirements: Docker with Compose, [uv](https://docs.astral.sh/uv/).
+
+On Windows without WSL the `make` targets do not run: run their commands inside containers instead
+(see `CLAUDE.md` at the repository root).
 
 ```bash
 cp .env.example .env
@@ -97,7 +112,7 @@ make test-all                # + PaddleOCR golden cases and S3 integration
 make lint typecheck security golden
 ```
 
-Tests carry `@pytest.mark.req("<id>")` with the test-plan id (F-01…F-32, RF-xx, SEC-xx);
+Tests carry `@pytest.mark.req("<id>")` with the test-plan id (F-01…F-33, RF-xx, SEC-xx);
 `python scripts/traceability.py` prints the requirement → test matrix.
 
 Performance check: `make bench LINES=5000` (and `LINES=50000`).

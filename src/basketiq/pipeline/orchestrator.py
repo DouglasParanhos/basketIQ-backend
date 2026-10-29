@@ -17,14 +17,14 @@ from PIL import Image
 
 from basketiq.domain.confidence import Evaluation, LineView, ReceiptView, Thresholds, evaluate
 from basketiq.domain.status import Merchant, ProcessingRoute, ReceiptStatus, SourceType
-from basketiq.pipeline.classify import classify
+from basketiq.pipeline.classify import Classification, classify
 from basketiq.pipeline.external import ExternalExtractor, ExternalUnavailableError, fallback_reason
 from basketiq.pipeline.layout import group_into_lines
 from basketiq.pipeline.llm import AmbiguityResolver, LlmUnavailableError, apply_proposals
 from basketiq.pipeline.ocr import OcrEngine
 from basketiq.pipeline.ocr.base import OcrUnavailableError
 from basketiq.pipeline.parsers import parser_for
-from basketiq.pipeline.parsers.base import apply_deposit_quantities
+from basketiq.pipeline.parsers.base import Parser, apply_deposit_quantities
 from basketiq.pipeline.pdf_text import extract_pdf_text, has_usable_text
 from basketiq.pipeline.preprocess import load_image, ocr_tiles, rasterize_pdf
 from basketiq.pipeline.quality import image_warnings, ocr_warnings
@@ -52,6 +52,9 @@ class PipelineDeps:
     max_bytes: int
     max_pages: int
     external_timeout: float = 30.0
+    # Seams for the evaluation harness (unseen-layout mode); production keeps the defaults.
+    classifier: Callable[[DocumentText, Merchant | None], Classification] = classify
+    parser_factory: Callable[[Merchant], Parser] = parser_for
 
 
 @dataclass
@@ -143,7 +146,7 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
         doc, out.join_notes = join_documents(docs)
 
     with stage("classify"):
-        classification = classify(doc, request.merchant_hint)
+        classification = deps.classifier(doc, request.merchant_hint)
     out.merchant_confidence = classification.confidence
     out.merchant_hint_conflict = classification.hint_conflict
     merchant = classification.merchant
@@ -153,7 +156,7 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
         return out
 
     with stage("parse"):
-        parsed = parser_for(merchant).parse(doc)
+        parsed = deps.parser_factory(merchant).parse(doc)
         apply_deposit_quantities(parsed.lines)
         parsed.field_confidence["merchant"] = classification.confidence
 
