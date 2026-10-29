@@ -153,3 +153,15 @@ def test_qr_figures_are_reported_but_never_baselined() -> None:
     baseline = {"overall": {"qr_read_rate": 1.0, "line_recall": 0.9}}
     current = {"overall": {"qr_read_rate": 0.0, "line_recall": 0.9}}
     assert regressions(current, baseline) == []
+
+
+@pytest.mark.req("F-33")
+def test_the_calibrated_mode_also_prints_the_totals_per_route(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("sys.argv", ["golden", "--dir", str(SYNTHETIC / "lidl_text")])
+    golden.main()
+    out = capsys.readouterr().out
+    assert '"per_route"' in out
+    assert '"overall"' in out
+    assert "NOTE:" not in out  # still the calibrated mode

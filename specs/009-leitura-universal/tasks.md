@@ -116,3 +116,5 @@ Só o A0. Os fluxos A1 a A7 não começam sem a linha de base e a confirmação 
 - **Observação, sem regra:** restam 4 linhas a mais nas 6 fotos reais, 3 delas no Aldi: a linha dos títulos que traz o primeiro
   preço, e duas linhas de quantidade («6 x 0,99 €», «2 x 2,19 €») com uma classe de IVA solta. A coluna cega diz se é padrão;
   só então se decide uma regra
+- [x] T041 (commit j) O modo calibrado (sem `--unseen`) também imprime `per_route` e `overall`, para se poder comparar com os
+  totais do modo `--unseen`; F-33

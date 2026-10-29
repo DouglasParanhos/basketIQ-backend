@@ -470,8 +470,7 @@ def main() -> None:
     if report["unlabelled"]:
         print(f"WARNING: no .expected.json for {report['unlabelled']}; not measured", file=sys.stderr)
     print(json.dumps(report["per_merchant"], indent=2, ensure_ascii=False))
-    if unseen:
-        print(json.dumps({k: report[k] for k in ("per_route", "overall")}, indent=2, ensure_ascii=False))
+    print(json.dumps({k: report[k] for k in ("per_route", "overall")}, indent=2, ensure_ascii=False))
     if args.baseline and args.write_baseline:
         slim = {
             "meta": meta,
