@@ -95,6 +95,9 @@ Só o A0. Os fluxos A1 a A7 não começam sem a linha de base e a confirmação 
   como «CESCONTO», só no início de uma linha com montante negativo (F-52), e «e/kg» por «€/kg» (F-53). Só valem quando
   a aritmética fecha (peso × preço/kg = total); senão a linha fica por resolver, para revisão. «Ei» por «€1» numa linha
   de um só preço não se aceita: não há aritmética que o confirme. Todos os testes com `@pytest.mark.seen_once`
+- [x] T039 (commit i, `layout.py`, sozinho para poder reverter) Duas caixas empilhadas na mesma coluna (sobreposição em x
+  de 70 % da mais estreita ou mais, e alturas a mais de um quarto de texto de diferença) nunca são da mesma linha (F-54).
+  Com 50 % partia mal uma linha («MAÇA PINK», 52 %); de 70 % a 90 % o resultado é igual, e ficou-se por 70 %
 - **Dispensado por agora: `ocr_table.py`.** Gatilho para o reabrir: se a coluna cega (`Receipts/_blind/`) mostrar falhas
   de coluna ou de cabeçalho como causa dominante (por exemplo fotos sem cabeçalho legível)
 - **Estudo aberto, pré-processamento (causa a, 11 montantes não lidos):** um detetor com a imagem ampliada
@@ -105,3 +108,11 @@ Só o A0. Os fluxos A1 a A7 não começam sem a linha de base e a confirmação 
   descrição (D1) e da tela de revisão (A5)
 - **Não se regista «meta atingida» com base nas 6 fotos reais:** são o conjunto em que as regras foram desenhadas. A prova
   é a coluna cega, condição para fechar o A2.2 e abrir o A2.3 e o A3
+- [x] T040 (commit i) `tests/golden/baseline_unseen.json` regravada (sem QR, OCR real, 12 notas) para o golden proteger os ganhos de
+  (g), (h) e (i): recall geral 87,1 → 93,25 %, precisão 93,4 → 97,4 %, correções por nota 3,33 → 2,42; OCR 83,7 → 91,5 % de
+  recall, 91,5 → 96,7 % de precisão e 6,5 → 4,67 correções por foto; PDF igual; Aldi 74,3 → 85,7 % de recall e 15,5 → 10,0 correções
+  por nota; Auchan 0 → 100 % de recall. `baseline.json` e `baseline_ocr.json` (sintéticas) não mudam: o golden de hoje dá as
+  mesmas métricas, por isso não se regravam
+- **Observação, sem regra:** restam 4 linhas a mais nas 6 fotos reais, 3 delas no Aldi: a linha dos títulos que traz o primeiro
+  preço, e duas linhas de quantidade («6 x 0,99 €», «2 x 2,19 €») com uma classe de IVA solta. A coluna cega diz se é padrão;
+  só então se decide uma regra

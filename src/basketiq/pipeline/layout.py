@@ -47,6 +47,9 @@ _MIN_AMOUNTS = 6  # amounts nearby needed to judge whether the tilt explains whe
 _MAX_TILT_RESIDUAL = 0.2  # of a row pitch: how far the tilt may be from what is observed and still be trusted
 _JUDGEMENT_ROWS = 4  # rows above and below a token whose amounts decide whether its tilt is trusted
 _COLUMN_WIDTH = 0.1  # of the page width: tokens starting this close to the left edge are in its first column
+_STACKED_OVERLAP = 0.7  # of the narrower box: two boxes this much over each other in x are in the same column
+# Closer than this in y (a fraction of a text height), two boxes in a column are the same row read twice.
+_STACKED_GAP = 0.25
 
 
 def _row_pitch(tokens: list[TextToken]) -> float | None:
@@ -107,6 +110,29 @@ def _tilt_corrections(tokens: list[TextToken]) -> list[float]:
     return trusted
 
 
+def _split_stacked(tokens: list[TextToken], centres: list[float], page: int) -> list[TextLine]:
+    """A visual line, cut in two wherever two of its boxes sit one above the other in the same column.
+
+    A row never holds two boxes over each other: if a tilt put two rows (or a row and the quantity line above
+    it) into one line, the boxes that share a column say where it was joined. Cut at the middle between their
+    heights, and look again at each half."""
+    height = median(t.y1 - t.y0 for t in tokens)
+    for i, a in enumerate(tokens):
+        for j in range(i + 1, len(tokens)):
+            b = tokens[j]
+            shared = min(a.x1, b.x1) - max(a.x0, b.x0)
+            if shared > _STACKED_OVERLAP * min(a.x1 - a.x0, b.x1 - b.x0) and (
+                abs(centres[i] - centres[j]) > _STACKED_GAP * height
+            ):
+                middle = (centres[i] + centres[j]) / 2
+                above = [(t, c) for t, c in zip(tokens, centres, strict=True) if c <= middle]
+                below = [(t, c) for t, c in zip(tokens, centres, strict=True) if c > middle]
+                return _split_stacked([t for t, _ in above], [c for _, c in above], page) + _split_stacked(
+                    [t for t, _ in below], [c for _, c in below], page
+                )
+    return [TextLine(tokens=sorted(tokens, key=lambda t: t.x0), page=page)]
+
+
 def group_into_lines(tokens: list[TextToken], overlap_ratio: float = 0.5) -> list[TextLine]:
     """A token belongs to a line when its centre is within `1 - overlap_ratio` of the smaller text
     height from the centre of the line. Lines are returned top to bottom, tokens left to right.
@@ -133,8 +159,8 @@ def group_into_lines(tokens: list[TextToken], overlap_ratio: float = 0.5) -> lis
                     current.append(token)
                     centres.append(centre)
                     continue
-                lines.append(TextLine(tokens=sorted(current, key=lambda t: t.x0), page=page))
+                lines.extend(_split_stacked(current, centres, page))
             current, centres = [token], [centre]
         if current:
-            lines.append(TextLine(tokens=sorted(current, key=lambda t: t.x0), page=page))
+            lines.extend(_split_stacked(current, centres, page))
     return lines

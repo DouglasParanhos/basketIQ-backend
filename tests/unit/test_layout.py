@@ -95,3 +95,58 @@ def test_flat_pdf_words_are_untouched() -> None:
         for i, w in enumerate(["ITEM", "2", "X", "1,00"])
     ]
     assert texts(words) == ["ITEM 2 X 1,00"] * 6
+
+
+# ---- commit (i): a row never holds two boxes stacked in the same column ----------------------------------
+
+
+def box(text: str, x0: float, x1: float, y0: float) -> TextToken:
+    return TextToken(text=text, x0=x0, x1=x1, y0=y0, y1=y0 + 25)
+
+
+@pytest.mark.seen_once  # seen on 1 photo: two rows of a tilted receipt joined into one line
+@pytest.mark.req("F-54")
+def test_two_boxes_stacked_in_the_same_column_are_not_the_same_row() -> None:
+    lines = group_into_lines(
+        [
+            box("BATATA BRANCA 2,5KG", 60, 490, 100),
+            box("2,29", 626, 730, 100),
+            box("SALSICHA PICANTE", 63, 434, 110),  # ten units lower: close enough to be joined by the tilt
+            box("3,99", 628, 732, 110),
+        ]
+    )
+    assert [line.text for line in lines] == ["BATATA BRANCA 2,5KG 2,29", "SALSICHA PICANTE 3,99"]
+
+
+@pytest.mark.seen_once  # seen on 1 photo: two rows of a tilted receipt joined into one line
+@pytest.mark.req("F-54")
+def test_a_quantity_row_stacked_over_its_item_is_split_from_it() -> None:
+    lines = group_into_lines(
+        [
+            box("LEITE", 88, 196, 112),
+            box("6 x 0,99 EUR", 182, 385, 100),
+            box("UHT GORDO. 1L", 184, 392, 112),
+            box("5,94", 638, 740, 112),
+        ]
+    )
+    assert [line.text for line in lines] == ["6 x 0,99 EUR", "LEITE UHT GORDO. 1L 5,94"]
+
+
+@pytest.mark.seen_once  # seen on 1 photo: two rows of a tilted receipt joined into one line
+@pytest.mark.req("F-54")
+def test_boxes_side_by_side_or_the_same_row_read_twice_stay_together() -> None:
+    side_by_side = group_into_lines(
+        [box("LEITE", 50, 120, 100), box("UHT", 130, 200, 101), box("1,20", 600, 700, 100)]
+    )
+    assert [line.text for line in side_by_side] == ["LEITE UHT 1,20"]
+    twice = group_into_lines([box("PAO DE FORMA", 50, 300, 100), box("PAO DE FORMA", 52, 298, 102)])
+    assert len(twice) == 1  # two units apart: the same row, not two
+
+
+@pytest.mark.seen_once  # seen on 1 photo: two rows of a tilted receipt joined into one line
+@pytest.mark.req("F-54")
+def test_rows_that_were_already_apart_are_untouched() -> None:
+    lines = group_into_lines(
+        [box("PAO", 50, 150, 100), box("1,00", 600, 700, 100), box("LEITE", 50, 150, 160)]
+    )
+    assert [line.text for line in lines] == ["PAO 1,00", "LEITE"]
