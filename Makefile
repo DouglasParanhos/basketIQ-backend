@@ -3,7 +3,7 @@
 export UV_PROJECT_ENVIRONMENT ?= $(HOME)/.venvs/basketiq
 RUN = uv run --frozen
 
-.PHONY: install up up-llm down logs migrate test test-all lint typecheck security golden golden-real golden-unseen traceability openapi fixtures seed-perf bench
+.PHONY: install up up-llm down logs migrate test test-all lint typecheck security golden golden-real golden-unseen golden-unseen-qr traceability openapi fixtures seed-perf bench
 
 install:            ## install all dependencies (OCR + LLM extras, dev tools)
 	uv sync --frozen --all-extras
@@ -50,8 +50,12 @@ golden-real:        ## real receipts (kept outside git): make golden-real GOLDEN
 	GOLDEN_REAL_DIR=$(GOLDEN_REAL_DIR) $(RUN) pytest -m golden_real tests/golden
 
 golden-unseen: GOLDEN_REAL_DIR ?= ../Receipts
-golden-unseen:      ## real receipts read as if no shop had a parser (generic parser); add --force-unknown by hand
-	$(RUN) python -m basketiq.eval.golden --dir $(GOLDEN_REAL_DIR) --ocr --unseen --baseline tests/golden/baseline_unseen_A0.json
+golden-unseen:      ## real receipts read as if no shop had a parser (generic parser, no QR); add --force-unknown by hand
+	$(RUN) python -m basketiq.eval.golden --dir $(GOLDEN_REAL_DIR) --ocr --unseen --no-qr --baseline tests/golden/baseline_unseen.json
+
+golden-unseen-qr: GOLDEN_REAL_DIR ?= ../Receipts
+golden-unseen-qr:   ## same with the fiscal QR reader: a report only, no baseline
+	$(RUN) python -m basketiq.eval.golden --dir $(GOLDEN_REAL_DIR) --ocr --unseen --report reports/golden_unseen_qr.json
 
 traceability:       ## requirement → test matrix (fails on uncovered test-plan scenarios)
 	$(RUN) python scripts/traceability.py --out reports/traceability.md

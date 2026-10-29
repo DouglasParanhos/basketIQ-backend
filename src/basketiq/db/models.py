@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -74,6 +74,7 @@ class Receipt(Base):
         Index("ix_receipts_user_merchant_purchase", "user_id", "merchant", "purchase_at"),
         Index("ix_receipts_merchant_purchase", "merchant", "purchase_at"),
         Index("ix_receipts_user_hash", "user_id", "file_hash"),
+        Index("ix_receipts_user_fiscal_key", "user_id", "issuer_nif", "document_number"),
         Index("ix_receipts_original_expires", "original_expires_at"),
     )
 
@@ -113,6 +114,18 @@ class Receipt(Base):
     original_deleted_at: Mapped[datetime | None]
     # How the photos of a long receipt were joined: one {"photo", "overlap", "removed"} per pair of photos.
     merge_notes: Mapped[list[Any]] = mapped_column(default=list)
+    # The fiscal QR code (Portaria 195/2020), only what the checks use: never the buyer's tax number (field B)
+    # and never the raw text.
+    issuer_nif: Mapped[str | None] = mapped_column(String(9))
+    document_type: Mapped[str | None] = mapped_column(String(4))
+    document_number: Mapped[str | None] = mapped_column(String(64))
+    atcud: Mapped[str | None] = mapped_column(String(70))
+    qr_date: Mapped[date | None]
+    qr_total_cents: Mapped[int | None] = mapped_column(BigInteger)
+    qr_tax_cents: Mapped[int | None] = mapped_column(BigInteger)
+    # What the QR said against what was read, to review; and where a value came from when it was not the text.
+    qr_notes: Mapped[list[Any]] = mapped_column(default=list)
+    field_sources: Mapped[dict[str, Any]] = mapped_column(default=dict)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

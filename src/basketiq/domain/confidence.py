@@ -55,6 +55,8 @@ class ReceiptView:
     merchant_hint_conflict: bool = False
     # What was done to join the photos of one receipt: {"photo", "overlap", "removed"} per pair of photos.
     join_notes: list[Any] = field(default_factory=list)
+    # What the fiscal QR code said against what was read: {"code", "field", "message", "details"} each.
+    qr_notes: list[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -229,6 +231,17 @@ def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
 
     for note in view.join_notes:
         reasons.append(_join_reason(note))
+
+    for qr_note in view.qr_notes:
+        if qr_note["field"] not in view.edited_fields:  # a value the person confirmed is settled
+            reasons.append(
+                ReviewReason(
+                    code=qr_note["code"],
+                    field=qr_note["field"],
+                    message=qr_note["message"],
+                    details=dict(qr_note["details"]),
+                )
+            )
 
     if view.duplicate_suspected:
         reasons.append(

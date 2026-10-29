@@ -25,6 +25,7 @@ dependencies = [
     "pypdfium2>=4.30",
     "pillow>=11.0",
     "pillow-heif>=0.18",
+    "zxing-cpp>=3.1",  # local reader of the fiscal QR code (Apache-2.0)
     "numpy>=1.26",
     "filetype>=1.2",
     "python-multipart>=0.0.9",

@@ -14,17 +14,39 @@ CLASSIFIER_VERSION = "classify-1"
 MIN_CONFIDENCE = 0.6
 HEADER_LINES = 20
 
+NIF_WEIGHT = 0.95
+
+# The tax number of each chain's company (public company data), as printed on its receipts. The same number is
+# evidence when it is read from the text and when it is read from the fiscal QR code (field A).
+CHAIN_NIFS: dict[Merchant, str] = {
+    Merchant.PINGO_DOCE: "500829993",
+    Merchant.LIDL: "503340855",
+    Merchant.CONTINENTE: "502011475",
+    Merchant.AUCHAN: "503003808",
+    Merchant.ALDI: "516245708",
+    Merchant.MERCADONA: "514038942",
+    Merchant.EL_CORTE_INGLES: "501810285",
+}
+
+
+def _nif_signal(merchant: Merchant) -> tuple[re.Pattern[str], float, bool]:
+    """The number as the OCR may print it: in groups of three apart by a space or a dot, a zero read as O."""
+    nif = CHAIN_NIFS[merchant]
+    groups = [nif[i : i + 3].replace("0", "[0O]") for i in range(0, len(nif), 3)]
+    return re.compile(r"[\s.]?".join(groups)), NIF_WEIGHT, False
+
+
 # (pattern, weight, header_only). Weights are independent evidence strengths.
 _SIGNALS: dict[Merchant, list[tuple[re.Pattern[str], float, bool]]] = {
     Merchant.PINGO_DOCE: [
         (re.compile(r"PINGO\s*DOCE"), 0.9, False),
-        (re.compile(r"500\s?829\s?993"), 0.95, False),  # NIPC printed on the receipt
+        _nif_signal(Merchant.PINGO_DOCE),
         (re.compile(r"PINGODOCE\.PT"), 0.6, False),
         (re.compile(r"POUPA\s*MAIS"), 0.5, False),
     ],
     Merchant.LIDL: [
         (re.compile(r"\bLIDL\b"), 0.9, True),
-        (re.compile(r"503\s?340\s?855"), 0.95, False),  # NIF printed on the receipt
+        _nif_signal(Merchant.LIDL),
         (re.compile(r"LIDL\.PT"), 0.6, False),
         (re.compile(r"LIDL\s*PLUS"), 0.5, False),
     ],
@@ -32,28 +54,27 @@ _SIGNALS: dict[Merchant, list[tuple[re.Pattern[str], float, bool]]] = {
         (re.compile(r"\bCONTINENTE\b"), 0.9, True),
         (re.compile(r"MODELO\s+CONTINENTE"), 0.95, False),
         (re.compile(r"CARTAO\s+CONTINENTE"), 0.6, False),
-        (re.compile(r"502\s?011\s?475"), 0.95, False),  # NIF of Modelo Continente printed on the receipt
+        _nif_signal(Merchant.CONTINENTE),
     ],
     Merchant.AUCHAN: [
         (re.compile(r"\bAUCHAN\b"), 0.9, True),
         (re.compile(r"AUCHAN\.PT"), 0.6, False),
-        (re.compile(r"503\s?003\s?808"), 0.95, False),  # NIF of Auchan Retail Portugal printed on the receipt
+        _nif_signal(Merchant.AUCHAN),
     ],
     Merchant.ALDI: [
         (re.compile(r"\bALDI\b"), 0.9, True),
         (re.compile(r"ALDI\.PT"), 0.6, False),
-        (re.compile(r"516\s?245\s?708"), 0.95, False),  # NIF of ALDI Retail printed on the receipt
+        _nif_signal(Merchant.ALDI),
     ],
     Merchant.MERCADONA: [
         (re.compile(r"\bMERCADONA\b"), 0.9, True),
         (re.compile(r"IRMADONA\s+SUPERMERCADOS"), 0.9, False),  # company name
-        (re.compile(r"514\s?038\s?942"), 0.95, False),  # NIF of Irmadona Supermercados
+        _nif_signal(Merchant.MERCADONA),
     ],
     Merchant.EL_CORTE_INGLES: [
         (re.compile(r"EL\s+CORTE\s+INGLES"), 0.9, True),
         (re.compile(r"ELCORTEINGLES\.PT"), 0.6, False),
-        # NIF, printed 501.810.285; the OCR reads the zero as the letter O
-        (re.compile(r"501[\s.]?81[0O][\s.]?285"), 0.95, False),
+        _nif_signal(Merchant.EL_CORTE_INGLES),
     ],
 }
 
@@ -70,7 +91,10 @@ def _fold(text: str) -> str:
     return "".join(c for c in text if not unicodedata.combining(c)).upper()
 
 
-def classify(doc: DocumentText, hint: Merchant | None = None) -> Classification:
+def classify(
+    doc: DocumentText, hint: Merchant | None = None, issuer_nif: str | None = None
+) -> Classification:
+    """`issuer_nif` is the tax number read from the fiscal QR code: evidence independent of the text."""
     header = _fold("\n".join(line.text for line in doc.lines[:HEADER_LINES]))
     full = _fold(doc.text)
     scores: dict[Merchant, tuple[float, list[str]]] = {}
@@ -83,6 +107,11 @@ def classify(doc: DocumentText, hint: Merchant | None = None) -> Classification:
                 miss *= 1 - weight
                 found.append(pattern.pattern)
         scores[merchant] = (1 - miss, found)
+
+    chain = next((m for m, nif in CHAIN_NIFS.items() if nif == issuer_nif), None)
+    if chain is not None:
+        score, found = scores[chain]
+        scores[chain] = (1 - (1 - score) * (1 - NIF_WEIGHT), [*found, "qr_nif"])
 
     ranked = sorted(scores.items(), key=lambda kv: kv[1][0], reverse=True)
     (best, (best_score, best_signals)), (_, (second_score, _)) = ranked[0], ranked[1]

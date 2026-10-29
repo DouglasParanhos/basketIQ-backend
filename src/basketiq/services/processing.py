@@ -225,6 +225,16 @@ def persist_outcome(
     receipt.store_label = parsed.store_label
     receipt.merchant_name = parsed.merchant_name
     receipt.merge_notes = list(outcome.join_notes)
+    qr = outcome.qr
+    receipt.issuer_nif = qr.issuer_nif if qr else None
+    receipt.document_type = qr.doc_type if qr else None
+    receipt.document_number = qr.doc_number if qr else None
+    receipt.atcud = qr.atcud if qr else None
+    receipt.qr_date = qr.doc_date if qr else None
+    receipt.qr_total_cents = qr.total_cents if qr else None
+    receipt.qr_tax_cents = qr.tax_cents if qr else None
+    receipt.qr_notes = list(outcome.qr_notes)
+    receipt.field_sources = dict(parsed.field_sources)
     receipt.subtotal_cents = parsed.subtotal_cents
     receipt.tax_cents = parsed.tax_cents
     receipt.total_cents = parsed.total_cents
@@ -296,10 +306,17 @@ def persist_outcome(
 
 
 def find_attribute_duplicate(db: Session, receipt: Receipt) -> uuid.UUID | None:
-    """RF-08: same file hash, or same merchant + purchase minute + total, among the user's receipts."""
+    """RF-08: same file hash, same fiscal document (issuer, number and ATCUD from the QR code), or same
+    merchant + purchase minute + total, among the user's receipts."""
     conditions = []
     if receipt.file_hash:
         conditions.append(Receipt.file_hash == receipt.file_hash)
+    if receipt.issuer_nif and receipt.document_number and receipt.atcud:
+        conditions.append(
+            (Receipt.issuer_nif == receipt.issuer_nif)
+            & (Receipt.document_number == receipt.document_number)
+            & (Receipt.atcud == receipt.atcud)
+        )
     if receipt.merchant and receipt.purchase_at and receipt.total_cents is not None:
         conditions.append(
             (Receipt.merchant == receipt.merchant)

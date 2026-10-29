@@ -27,6 +27,15 @@ from basketiq.pipeline.parsers import parser_for
 from basketiq.pipeline.parsers.base import Parser, apply_deposit_quantities
 from basketiq.pipeline.pdf_text import extract_pdf_text, has_usable_text
 from basketiq.pipeline.preprocess import load_image, ocr_tiles, rasterize_pdf
+from basketiq.pipeline.qr import (
+    QR_BUDGET_S,
+    AtQr,
+    QrNote,
+    QrReader,
+    apply_qr,
+    atcud_matches_print,
+    read_at_qr,
+)
 from basketiq.pipeline.quality import image_warnings, ocr_warnings
 from basketiq.pipeline.schema import DocumentText, ParsedReceipt, TextToken
 from basketiq.pipeline.stitch import JoinNote, join_documents
@@ -53,8 +62,9 @@ class PipelineDeps:
     max_pages: int
     external_timeout: float = 30.0
     # Seams for the evaluation harness (unseen-layout mode); production keeps the defaults.
-    classifier: Callable[[DocumentText, Merchant | None], Classification] = classify
+    classifier: Callable[[DocumentText, Merchant | None, str | None], Classification] = classify
     parser_factory: Callable[[Merchant], Parser] = parser_for
+    qr_reader: QrReader = read_at_qr
 
 
 @dataclass
@@ -88,6 +98,8 @@ class PipelineOutcome:
     estimated_cost_cents: int = 0
     quality_warnings: list[str] = field(default_factory=list)
     join_notes: list[JoinNote] = field(default_factory=list)
+    qr: AtQr | None = None
+    qr_notes: list[QrNote] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     stage_ms: dict[str, int] = field(default_factory=dict)
 
@@ -145,8 +157,11 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
         docs += [_extract_text(data, SourceType.IMAGE, deps.ocr, out) for data, _ in request.extra]
         doc, out.join_notes = join_documents(docs)
 
+    with stage("qr"):
+        out.qr = _find_qr(request, validated.source_type, deps)
+
     with stage("classify"):
-        classification = deps.classifier(doc, request.merchant_hint)
+        classification = deps.classifier(doc, request.merchant_hint, out.qr.issuer_nif if out.qr else None)
     out.merchant_confidence = classification.confidence
     out.merchant_hint_conflict = classification.hint_conflict
     merchant = classification.merchant
@@ -167,6 +182,11 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
     with stage("external"):
         parsed = _maybe_external(request, deps, parsed, merchant, out)
 
+    if out.qr is not None:
+        out.qr_notes = apply_qr(parsed, out.qr, doc.lines)
+        if atcud_matches_print(doc, out.qr) is False:
+            out.notes.append("atcud_printed_mismatch")
+
     if not doc.lines and not parsed.lines:
         out.status, out.error_code = ReceiptStatus.UNREADABLE, "no_text"
         out.error_message = "Não foi possível ler texto no documento."
@@ -175,7 +195,7 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
     with stage("decide"):
         thresholds = deps.thresholds_for(parsed.merchant)
         evaluation = evaluate(
-            view_from_parsed(parsed, out.merchant_hint_conflict, out.join_notes), thresholds
+            view_from_parsed(parsed, out.merchant_hint_conflict, out.join_notes, out.qr_notes), thresholds
         )
     out.parsed, out.evaluation = parsed, evaluation
     out.status = ReceiptStatus.REVIEW_REQUIRED if evaluation.reasons else ReceiptStatus.COMPLETED
@@ -279,11 +299,29 @@ def _maybe_external(
     return parsed
 
 
+def _find_qr(request: PipelineRequest, source_type: SourceType, deps: PipelineDeps) -> AtQr | None:
+    """The fiscal QR of the receipt, from any of its files, within one budget for all of them."""
+    documents = [(request.data, source_type), *((data, SourceType.IMAGE) for data, _ in request.extra)]
+    remaining = QR_BUDGET_S
+    for data, kind in documents:
+        started = time.perf_counter()
+        if qr := deps.qr_reader(data, kind, remaining):
+            return qr
+        remaining -= time.perf_counter() - started
+        if remaining <= 0:
+            break
+    return None
+
+
 def view_from_parsed(
-    parsed: ParsedReceipt, hint_conflict: bool, join_notes: list[JoinNote] | None = None
+    parsed: ParsedReceipt,
+    hint_conflict: bool,
+    join_notes: list[JoinNote] | None = None,
+    qr_notes: list[QrNote] | None = None,
 ) -> ReceiptView:
     return ReceiptView(
         join_notes=list(join_notes or []),
+        qr_notes=list(qr_notes or []),
         merchant=parsed.merchant,
         purchase_at=parsed.purchase_at,
         total_cents=parsed.total_cents,

@@ -106,6 +106,7 @@ def view_of(receipt: Receipt) -> ReceiptView:
             and "merchant" not in edited
         ),
         join_notes=list(receipt.merge_notes or []),
+        qr_notes=list(receipt.qr_notes or []),
     )
 
 

@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from basketiq.domain.status import ReceiptStatus
+from basketiq.eval import golden
 from basketiq.eval.golden import _line_edits, _match_lines, discover, regressions, run, unlabelled
 from basketiq.pipeline.schema import ParsedLine
 
@@ -129,3 +130,26 @@ def test_purchase_time_matches_within_five_minutes(tmp_path: Path) -> None:
 
     assert date_accuracy(timedelta(minutes=5)) == 1.0  # header and card terminal clocks differ by minutes
     assert date_accuracy(timedelta(minutes=6)) == 0.0
+
+
+@pytest.mark.req("F-33")
+def test_no_qr_runs_the_parser_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[Any] = []
+    real = golden.run_pipeline
+
+    def spy(request: Any, deps: Any) -> Any:
+        seen.append(deps.qr_reader)
+        return real(request, deps)
+
+    monkeypatch.setattr(golden, "run_pipeline", spy)
+    run([SYNTHETIC / "lidl_text"], use_ocr=False, unseen=True)
+    run([SYNTHETIC / "lidl_text"], use_ocr=False, unseen=True, no_qr=True)
+    assert seen[0] is not golden._no_qr
+    assert seen[1] is golden._no_qr
+
+
+@pytest.mark.req("F-33")
+def test_qr_figures_are_reported_but_never_baselined() -> None:
+    baseline = {"overall": {"qr_read_rate": 1.0, "line_recall": 0.9}}
+    current = {"overall": {"qr_read_rate": 0.0, "line_recall": 0.9}}
+    assert regressions(current, baseline) == []

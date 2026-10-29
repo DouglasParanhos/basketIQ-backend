@@ -5,8 +5,10 @@ import io
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from PIL import Image
 from reportlab.lib.pagesizes import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from basketiq.domain.status import ProcessingRoute
@@ -139,3 +141,68 @@ PINGO_LINES = [
     "Data de emissão:15/09/2026",
 ]
 PINGO_TOTAL = 881
+
+
+# ------------------------------------------------------------------------------ fiscal QR code (A1)
+
+ISSUER = "500829993"  # a chain's company number: public data
+BUYER = "918273645"  # a made-up buyer number: it must never be stored or shown anywhere
+
+
+def at_message(
+    *,
+    issuer: str = ISSUER,
+    buyer: str = BUYER,
+    day: str = "20260915",
+    total: str = "8.81",
+    tax: str = "0.50",
+    number: str = "FS 04360642504231145/052961",
+    atcud: str = "JJDBMXMX-052961",
+    extra: str = "",
+) -> str:
+    """A fiscal QR message in the shape of the AT specification (point 4), with made-up values."""
+    fields = [
+        f"A:{issuer}", f"B:{buyer}", "C:PT", "D:FS", "E:N", f"F:{day}", f"G:{number}", f"H:{atcud}",
+        "I1:PT", "I3:7.70", "I4:0.46", f"N:{tax}", f"O:{total}", "Q:AbCd", "R:1234",
+    ]  # fmt: skip
+    return "*".join(fields) + (f"*{extra}" if extra else "")
+
+
+def qr_image(text: str, px: int = 240) -> Image.Image:
+    """A QR code image, drawn by the library that reads it."""
+    import zxingcpp
+
+    barcode = zxingcpp.create_barcode(text, zxingcpp.BarcodeFormat.QRCode)
+    modules = np.asarray(zxingcpp.write_barcode_to_image(barcode), dtype=np.uint8)
+    return Image.fromarray(modules).convert("L").resize((px, px), Image.Resampling.NEAREST)
+
+
+def make_pdf_with_qr(lines: list[str], qr_text: str | None, *, qr_page: int = 1, pages: int = 1) -> bytes:
+    """A receipt PDF whose `qr_page`-th page carries the QR code (the text is on the first page)."""
+    buf = io.BytesIO()
+    height = (len(lines) * 5 + 90) * mm
+    c = canvas.Canvas(buf, pagesize=(80 * mm, height))
+    for page in range(1, pages + 1):
+        c.setFont("Courier", 8)
+        y = height - 15 * mm
+        if page == 1:
+            for line in lines:
+                c.drawString(5 * mm, y, line)
+                y -= 5 * mm
+        if qr_text is not None and page == qr_page:
+            image = io.BytesIO()
+            qr_image(qr_text, 300).save(image, format="PNG")
+            image.seek(0)
+            c.drawImage(ImageReader(image), 20 * mm, 8 * mm, 40 * mm, 40 * mm)
+        c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def make_photo_with_qr(qr_text: str, size: tuple[int, int] = (900, 1600), qr_px: int = 130) -> bytes:
+    """A photo-like image with a small QR code near the bottom."""
+    photo = Image.new("RGB", size, (235, 235, 235))
+    photo.paste(qr_image(qr_text, qr_px).convert("RGB"), ((size[0] - qr_px) // 2, size[1] - qr_px - 80))
+    buf = io.BytesIO()
+    photo.save(buf, format="PNG")
+    return buf.getvalue()

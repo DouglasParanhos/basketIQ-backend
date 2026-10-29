@@ -109,6 +109,8 @@ class ParsedReceipt(BaseModel):
     store_label: str | None = None
     # Only for merchants without a parser: the name guessed from the header.
     merchant_name: str | None = None
+    # Where a value that did not come from the text came from, e.g. {"total": "qr"}.
+    field_sources: dict[str, str] = Field(default_factory=dict)
     subtotal_cents: int | None = None
     tax_cents: int | None = None
     total_cents: int | None = None

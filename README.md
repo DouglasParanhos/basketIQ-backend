@@ -65,6 +65,22 @@ calibrated parsers extend the generic one, so the figures are optimistic. `unrev
 design while the generic parser caps confidence at 0.6. Timings come from Docker Desktop on a developer
 machine (not 4 vCPU) and the first photo includes loading the OCR models.
 
+### Fiscal QR code
+
+Portuguese receipts carry a QR code with the issuer's tax number, the document number, the ATCUD, the date and
+the total (Portaria 195/2020). `pipeline/qr.py` reads it locally with zxing-cpp (Apache-2.0) in a stage of the
+pipeline: scales original, ×2, ×3, ×0.5 within a 2 s budget for the whole receipt, a PDF at 150 dpi page by page.
+A receipt without a readable QR goes on exactly as before: reading never raises, blocks or waits longer.
+
+It is used to classify (the issuer's tax number is strong evidence, with a single NIF → chain table in
+`classify.py`), to check the date and total (the QR total is the receipt total minus the card balance, voucher or
+deposit credit printed on it; a QR above the read total prevails, a QR below it never lowers the total in silence,
+it sends the receipt to review with both values) and to catch duplicates (issuer + document number + ATCUD, per
+user). Only what those uses need is stored (`receipts.issuer_nif`, `document_type`, `document_number`, `atcud`,
+`qr_date`, `qr_total_cents`, `qr_tax_cents`): never the buyer's tax number (field B) and never the raw text, and
+none of it is exposed by the API. The reader is tolerant: unknown or new fields are ignored. The specification read
+was v1.0 of 2020-08-13 (a third-party copy); v1.1 was not confirmed.
+
 ## Running locally (WSL / Linux)
 
 Requirements: Docker with Compose, [uv](https://docs.astral.sh/uv/).

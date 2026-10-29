@@ -29,7 +29,7 @@ from typing import Any
 
 from basketiq.domain.confidence import Thresholds
 from basketiq.domain.normalization import normalize_key
-from basketiq.domain.status import Merchant, ReceiptStatus
+from basketiq.domain.status import Merchant, ReceiptStatus, SourceType
 from basketiq.pipeline.classify import Classification
 from basketiq.pipeline.ocr import NoOcr, OcrEngine
 from basketiq.pipeline.orchestrator import PipelineDeps, PipelineRequest, run_pipeline
@@ -42,7 +42,14 @@ REGRESSION_TOLERANCE = 1e-9
 DATE_TOLERANCE = timedelta(minutes=5)  # receipts print several clocks (header, card terminal)
 LOOSE_MATCH = 0.6  # description similarity above which a misread line still counts as "the same line"
 LOWER_IS_BETTER = {"price_mae_cents", "corrections_per_note", "unreviewed_wrong"}
-NOT_BASELINED = {"failures", "time_mean_ms", "time_max_ms"}  # noisy or per-case, never compared
+NOT_BASELINED = {  # noisy, per-case or reported apart from the parser (QR), never compared
+    "failures",
+    "time_mean_ms",
+    "time_max_ms",
+    "qr_read_rate",
+    "qr_date_accuracy",
+    "qr_total_accuracy",
+}
 UNSEEN_CAVEAT = (
     "Small, biased sample: the calibrated parsers extend the generic one and were tuned on these same "
     "receipts, so these numbers are optimistic. They show that the mechanics work and serve as a "
@@ -80,6 +87,9 @@ class MerchantStats:
     review_flag_ok: int = 0
     review_flag_checked: int = 0
     corrections: int = 0  # edits a person would make, see _line_edits
+    qr_read: int = 0  # notes whose fiscal QR code was read
+    qr_date_ok: int = 0
+    qr_total_ok: int = 0  # the QR total held against the read one without a reason to review
     unreviewed_wrong: int = 0  # needed corrections but was not sent to review
     time_total_ms: int = 0
     time_max_ms: int = 0
@@ -115,6 +125,9 @@ class MerchantStats:
             "review_flag_accuracy": ratio(self.review_flag_ok, self.review_flag_checked),
             "corrections_per_note": round(self.corrections / self.documents, 2) if self.documents else None,
             "unreviewed_wrong": self.unreviewed_wrong,
+            "qr_read_rate": round(self.qr_read / self.documents, 4) if self.documents else None,
+            "qr_date_accuracy": round(self.qr_date_ok / self.qr_read, 4) if self.qr_read else None,
+            "qr_total_accuracy": round(self.qr_total_ok / self.qr_read, 4) if self.qr_read else None,
             "time_mean_ms": round(self.time_total_ms / self.documents) if self.documents else None,
             "time_max_ms": self.time_max_ms,
             "failures": self.failures,
@@ -219,12 +232,16 @@ def _line_edits(
     return edits + len(left_over)
 
 
-def _classify_unknown(_doc: DocumentText, _hint: Merchant | None) -> Classification:
+def _classify_unknown(_doc: DocumentText, _hint: Merchant | None, _nif: str | None) -> Classification:
     return Classification(merchant=Merchant.UNKNOWN, confidence=0.0, signals=[])
 
 
+def _no_qr(_data: bytes, _kind: SourceType, _budget: float) -> None:
+    return None
+
+
 def evaluate_case(
-    case: Case, ocr: OcrEngine, unseen: bool = False, force_unknown: bool = False
+    case: Case, ocr: OcrEngine, unseen: bool = False, force_unknown: bool = False, no_qr: bool = False
 ) -> tuple[dict[str, Any], MerchantStats]:
     """Runs one document and returns its result plus its own stats, to be merged by the caller."""
     exp = case.expected
@@ -244,6 +261,8 @@ def evaluate_case(
         deps.parser_factory = GenericPtParser
     if force_unknown:
         deps.classifier = _classify_unknown
+    if no_qr:
+        deps.qr_reader = _no_qr
     out = run_pipeline(PipelineRequest(data=data, declared_mime=mime), deps)
     parsed = out.parsed
     s = MerchantStats(documents=1)
@@ -319,9 +338,15 @@ def evaluate_case(
                 else:
                     fail(f"{e['raw_description']}: {key} {got_value} != {want}")
     s.unreviewed_wrong = int(out.status == ReceiptStatus.COMPLETED and s.corrections > 0)
+    if out.qr is not None:
+        s.qr_read += 1
+        s.qr_date_ok += int(out.qr.doc_date.isoformat() == exp.get("purchase_at", "")[:10])
+        s.qr_total_ok += int(not any(note["field"] == "total" for note in out.qr_notes))
     result |= {
         "corrections": s.corrections,
         "time_ms": s.time_total_ms,
+        "qr_ms": out.stage_ms.get("qr"),
+        "qr_read": out.qr is not None,
     }
     return result, s
 
@@ -334,6 +359,7 @@ def run(
     unseen: bool = False,
     force_unknown: bool = False,
     blind: bool = False,
+    no_qr: bool = False,
 ) -> dict[str, Any]:
     """`engine` lets callers that run several sets share one OCR engine (its models load once)."""
     ocr: OcrEngine = engine or NoOcr()
@@ -355,7 +381,7 @@ def run(
             if case.expected.get("requires_ocr") and not use_ocr:
                 skipped.append(case.name)
                 continue
-            result, stats = evaluate_case(case, ocr, unseen or force_unknown, force_unknown)
+            result, stats = evaluate_case(case, ocr, unseen or force_unknown, force_unknown, no_qr)
             results.append(result)
             for bucket in (per_merchant[result["merchant"]], per_route[str(result["route"])], overall):
                 bucket.merge(stats)
@@ -409,6 +435,7 @@ def main() -> None:
         action="store_true",
         help="also classify every receipt as UNKNOWN (implies --unseen)",
     )
+    parser.add_argument("--no-qr", action="store_true", help="skip the fiscal QR reader: the parser alone")
     parser.add_argument("--blind", action="store_true", help=f"run only the documents under {BLIND_DIR}/")
     parser.add_argument(
         "--meta", action="append", default=[], metavar="KEY=VALUE", help="kept in the baseline"
@@ -419,7 +446,14 @@ def main() -> None:
     args = parser.parse_args()
 
     unseen = args.unseen or args.force_unknown
-    report = run(args.dir, args.ocr, unseen=unseen, force_unknown=args.force_unknown, blind=args.blind)
+    report = run(
+        args.dir,
+        args.ocr,
+        unseen=unseen,
+        force_unknown=args.force_unknown,
+        blind=args.blind,
+        no_qr=args.no_qr,
+    )
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     if args.report:
         args.report.write_text(text, encoding="utf-8")
@@ -427,6 +461,7 @@ def main() -> None:
         "mode": "unseen+unknown" if args.force_unknown else "unseen" if unseen else "calibrated",
         "generated": datetime.now(UTC).isoformat(timespec="seconds"),
         "documents": report["overall"]["documents"],
+        "qr": "off" if args.no_qr else "on",
         **dict(item.split("=", 1) for item in args.meta),
     }
     if unseen:
