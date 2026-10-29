@@ -26,6 +26,7 @@ RULE_DESCRIPTION = 0.95
 MONEY = r"\d{1,4}[,.]\d{2}"
 
 UNIT_ALERT_CONFIDENCE = 0.5  # a unit in doubt: below every review threshold
+COUNT_INFERRED_CONFIDENCE = 0.5  # a count that was worked out from the amounts, not printed: reviewed
 _WHOLE_WEIGHT = re.compile(r"\d+[,.]000")
 
 DEPOSIT_CENTS = 10  # current deposit per bottle in the Portuguese return scheme

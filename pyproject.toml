@@ -98,4 +98,5 @@ markers = [
     "ocr: needs PaddleOCR models",
     "llm: needs a running Ollama",
     "golden_real: needs the real receipts in GOLDEN_REAL_DIR",
+    "seen_once: a layout rule seen on one real photo only; to confirm on the blind set (spec 009, A2.2)",
 ]

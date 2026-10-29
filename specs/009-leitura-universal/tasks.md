@@ -60,3 +60,31 @@ Só o A0. Os fluxos A1 a A7 não começam sem a linha de base e a confirmação 
 - [x] T029 Spec, Plano de Testes (F-39 a F-45) e rastreabilidade
 - [x] T030 Medição final nos 12 documentos reais: 11 QR lidos, data e relação do total certas nos 11, 10 a 468 ms
   por documento; estados, correções e falhas das 12 notas idênticos aos de antes (golden normal e sintético)
+
+## A2.2 fase 1 (foto, regras baratas)
+
+- [x] T031 Linha de títulos com palavras unidas por «/» («IVA ARTIGO/QT/LI PRECO VALOR») é cabeçalho e não fecha a
+  zona dos artigos (`parsers/table.py`: `is_header_row`, `first_column_role`); código de IVA da 1.ª coluna cortado só
+  com cabeçalho que o diga e ≥ 2 linhas com código da mesma largura (F-46)
+- [x] T032 Depósito: «DEPÓSITO 0,10» é artigo e conta para o total; «TOTAL DEPÓSITO VOLTA» e pagamento, troco e resumo
+  de IVA não são artigos (F-47)
+- [x] T033 Montantes como o OCR os lê: «e» por «€», «€ -», contagem perdida («X 2,68 5,36») deduzida por divisão
+  exata, com revisão e motivo; sem divisão exata a linha fica por resolver com nome e total; nunca uma quantidade
+  com 3 casas decimais (F-48)
+- [x] T034 Fixtures de OCR (só linhas de artigos de duas fotos reais) e 12 fotos de layouts inventados
+  (3 layouts × ruído, inclinação, preço colado, linha partida); teste de privacidade das fixtures (F-49, F-50)
+- [x] T035 Medição: 6 fotos reais OCR recall 83,7 → 85,3 %, precisão 91,5 → 91,7 %, correções por nota 6,5 → 6,0;
+  12 sintéticas recall 68,2 → 93,2 %, precisão 93,8 → 93,2 %, correções por nota 2,33 → 0,5; PDF e calibrados
+  sem alteração. Fase 2 (`ocr_table.py`) por decidir
+- [x] T036 Revisão com motivo também para a contagem deduzida por divisão exata (`_item`), só na rota de foto; o PDF
+  com texto fica como estava. Nos golden: PDF idêntico, e a foto Mercadona (calibrado) passa de COMPLETED a REVIEW_REQUIRED
+- **Regras vistas numa só foto, a confirmar na coluna cega** (testes com `@pytest.mark.seen_once`; se a coluna cega as
+  contrariar, revêem-se): (1) cabeçalho com títulos unidos por «/» («IVA ARTIGO/QT/LI»), `qt` como quantidade e
+  abreviaturas até 3 letras; (2) código de IVA na 1.ª coluna cortado só com cabeçalho que o diga e ≥ 2 linhas da mesma
+  largura; (3) contagem perdida («X 2,68 5,36») deduzida por divisão exata; (4) «e» lido em vez de «€» depois de um montante
+- [x] T037 Diagnóstico das linhas em falta ou erradas (6 fotos reais + 12 sintéticas, antes de decidir a fase 2). Reais, 34 linhas:
+  11 preço não lido ou lido com erro (a), 7 linha fundida pelo agrupamento (b), 0 descrição em duas linhas (c), 2 peso antes do
+  nome (d), 1 desconto (e), 13 outra (f: 11 gralhas de descrição do OCR, 2 «€» lido «e/kg» ou «ei»); 10 linhas a mais.
+  Sintéticas: 6 linhas, todas (c), por construção. Protótipos em sandbox (fora do código): caixas empilhadas na mesma coluna
+  não são da mesma linha (b), −3; peso antes do nome (d), −2; «e/kg» e «ei» (f), −2; «CESCONTO» (e), −1; as quatro juntas
+  34 → 25 linhas, recall OCR 85,3 → 91,5 %, precisão 91,7 → 98,3 %, correções por foto 6,0 → 4,33; PDF idêntico

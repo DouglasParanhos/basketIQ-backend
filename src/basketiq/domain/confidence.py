@@ -102,6 +102,13 @@ def _join_reason(note: dict[str, Any]) -> ReviewReason:
     )
 
 
+# Why a line is reviewed when only one of its fields is in doubt.
+_ONE_FIELD_IN_DOUBT: dict[tuple[str, ...], str] = {
+    ("unit",): "Unidade por confirmar: são unidades ou kg?",
+    ("quantity",): "Quantidade por confirmar: não está impressa, foi deduzida do total.",
+}
+
+
 def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
     reasons: list[ReviewReason] = []
     line_flags: dict[int, list[str]] = {}
@@ -196,11 +203,7 @@ def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
                 ReviewReason(
                     code="low_confidence",
                     line_index=i,
-                    message=(
-                        "Unidade por confirmar: são unidades ou kg?"
-                        if fields == ["unit"]
-                        else "Valores lidos com pouca confiança."
-                    ),
+                    message=_ONE_FIELD_IN_DOUBT.get(tuple(fields), "Valores lidos com pouca confiança."),
                     details={"fields": fields},
                 )
             )

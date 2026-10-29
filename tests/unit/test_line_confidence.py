@@ -4,6 +4,7 @@ import pytest
 
 from basketiq.domain.status import Merchant, ProcessingRoute
 from basketiq.pipeline.parsers import parser_for
+from basketiq.pipeline.parsers.base import COUNT_INFERRED_CONFIDENCE
 from basketiq.pipeline.schema import DocumentText, TextLine, TextToken
 from tests.helpers import doc_from_lines
 
@@ -39,7 +40,8 @@ def test_a_single_character_without_an_amount_before_it_counts() -> None:
 
 @pytest.mark.req("RF-06")
 def test_a_lost_count_is_deduced_from_unit_price_and_total() -> None:
-    """The unit price divides the total exactly: a checksum, so the quantity needs no confirmation."""
+    """The unit price divides the total exactly: the count is read, but on a photo a misread digit can still
+    divide, so the quantity is reviewed (spec 009, A2.2). The text of a PDF is exact: see the next test."""
     line = TextLine(
         tokens=[tok("-", 0, 0.29), tok("BIJO", 30, 0.96), tok("0,12", 500, 0.96), tok("0,84 B", 600, 0.96)]
     )
@@ -54,6 +56,21 @@ def test_a_lost_count_is_deduced_from_unit_price_and_total() -> None:
         12,
         84,
     )
+    assert bijo.field_confidence["quantity"] <= COUNT_INFERRED_CONFIDENCE
+
+
+@pytest.mark.req("RF-06")
+def test_a_lost_count_in_a_pdf_needs_no_confirmation() -> None:
+    line = TextLine(
+        tokens=[tok("-", 0, 0.29), tok("BIJO", 30, 0.96), tok("0,12", 500, 0.96), tok("0,84 B", 600, 0.96)]
+    )
+    doc = DocumentText(
+        lines=[line, TextLine(tokens=[tok("TOTAL 0,84", 0, 0.99)])],
+        route=ProcessingRoute.PDF_TEXT,
+        engine="test",
+    )
+    bijo = parser_for(Merchant.MERCADONA).parse(doc).lines[0]
+    assert bijo.quantity == 7
     assert bijo.field_confidence["quantity"] >= 0.8
 
 

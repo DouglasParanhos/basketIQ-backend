@@ -24,7 +24,7 @@ _ROLE_WORDS = {
     "desc": r"produtos?|descricao|designacao|artigos?|denominacao",
     "price": r"preco|unitario|unit|punit",
     "tax": r"imposto|iva|taxa|tipo",
-    "qty": r"quantidade|qtd|qtde|quant",
+    "qty": r"quantidade|qtd|qtde|qt|quant",
     "total": r"total|valor|importe",
 }
 _FILLER = {"de", "do", "da", "e"}
@@ -34,6 +34,7 @@ _QTY = re.compile(r"\d+(?:[,.]\d{1,3})?")
 _TAX = re.compile(r"[A-Za-z0-9]{1,2}")
 _MONEY = re.compile(MONEY)
 _PRINTED_QTY_CONFIDENCE = 0.5  # a count with only the line total: the unit price is derived, so reviewed
+_MAX_ABBREVIATION_LEN = 3  # letters: "QT", "LI" next to real titles in "ARTIGO/QT/LI"
 
 
 @dataclass(frozen=True)
@@ -65,10 +66,26 @@ def _header_roles(line: TextLine) -> list[tuple[str, TextToken]] | None:
     return pairs or None
 
 
+def _is_header_word(word: str) -> bool:
+    parts = [p for p in word.split("/") if p]
+    if len(parts) < 2:
+        return _role(word) is not None or _fold(word) in _FILLER
+    # "ARTIGO/QT/LI": titles joined by slashes. At least two are column titles, the rest short abbreviations.
+    roles = [_role(p) for p in parts]
+    return sum(r is not None for r in roles) >= 2 and all(
+        r is not None or len(_fold(p)) <= _MAX_ABBREVIATION_LEN for r, p in zip(roles, parts, strict=True)
+    )
+
+
 def is_header_row(text: str) -> bool:
     """ "IVA DESCRICAO VALOR": a column title, not the "IVA ..." summary that closes the items."""
     words = text.split()
-    return bool(words) and all(_role(w) is not None or _fold(w) in _FILLER for w in words)
+    return bool(words) and all(_is_header_word(w) for w in words)
+
+
+def first_column_role(text: str) -> str | None:
+    """The role of the first column title of a header row ("tax" for "IVA ARTIGO/QT/LI PRECO VALOR")."""
+    return _role(text.split()[0].split("/")[0]) if is_header_row(text) else None
 
 
 def find_table(lines: list[TextLine]) -> Table | None:
