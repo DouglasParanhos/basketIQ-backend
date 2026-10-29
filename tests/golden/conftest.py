@@ -12,4 +12,4 @@ def paddle_engine() -> OcrEngine:
     from basketiq.pipeline.ocr.paddle import PaddleOcrEngine
 
     settings = get_settings()
-    return PaddleOcrEngine(settings.ocr_det_model, settings.ocr_rec_model)
+    return PaddleOcrEngine(settings.ocr_det_model, settings.ocr_rec_model, settings.ocr_enable_mkldnn)

@@ -8,7 +8,7 @@ def build_ocr_engine(settings: Settings) -> OcrEngine:
     if settings.ocr_engine == "paddle":
         from basketiq.pipeline.ocr.paddle import PaddleOcrEngine
 
-        return PaddleOcrEngine(settings.ocr_det_model, settings.ocr_rec_model)
+        return PaddleOcrEngine(settings.ocr_det_model, settings.ocr_rec_model, settings.ocr_enable_mkldnn)
     return NoOcr()
 
 

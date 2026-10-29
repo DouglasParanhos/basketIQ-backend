@@ -36,7 +36,9 @@ dependencies = [
 [project.optional-dependencies]
 ocr = [
     "paddleocr>=3.0",
-    "paddlepaddle>=3.0",
+    # Pinned below 3.3: paddlepaddle 3.3.1 fails with oneDNN ("ConvertPirAttribute2RuntimeAttribute") on
+    # PP-OCRv5, which forced enable_mkldnn=False and made photo OCR ~3x slower. Revisit when fixed upstream.
+    "paddlepaddle==3.2.2",
 ]
 llm = [
     "agno>=3.1",

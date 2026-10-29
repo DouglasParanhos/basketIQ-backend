@@ -16,10 +16,11 @@ os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 
 
 class PaddleOcrEngine:
-    def __init__(self, det_model: str, rec_model: str) -> None:
+    def __init__(self, det_model: str, rec_model: str, enable_mkldnn: bool) -> None:
         self.name = f"paddleocr:{det_model}+{rec_model}"
         self._det_model = det_model
         self._rec_model = rec_model
+        self._enable_mkldnn = enable_mkldnn
         self._ocr: Any = None
         self._lock = threading.Lock()
 
@@ -34,8 +35,8 @@ class PaddleOcrEngine:
                     use_doc_orientation_classify=False,
                     use_doc_unwarping=False,
                     use_textline_orientation=False,
-                    # oneDNN kernels in paddle 3.3 fail on PP-OCRv5 ("ConvertPirAttribute2RuntimeAttribute").
-                    enable_mkldnn=False,
+                    # oneDNN is ~3x faster on CPU; paddlepaddle 3.3.1 breaks on it (pyproject pins 3.2.2).
+                    enable_mkldnn=self._enable_mkldnn,
                 )
         return self._ocr
 
@@ -82,7 +83,7 @@ def main() -> None:
         from basketiq.config import get_settings
 
         s = get_settings()
-        engine = PaddleOcrEngine(s.ocr_det_model, s.ocr_rec_model)
+        engine = PaddleOcrEngine(s.ocr_det_model, s.ocr_rec_model, s.ocr_enable_mkldnn)
         engine.recognize(Image.new("RGB", (200, 60), "white"))
         print("PaddleOCR models ready")
 

@@ -63,7 +63,9 @@ without a `.expected.json` are listed as not measured; files under `Receipts/_bl
 `--blind`. Read the numbers with care: the sample is small, every receipt is from a calibrated chain and the
 calibrated parsers extend the generic one, so the figures are optimistic. `unreviewed_wrong` is 0 by
 design while the generic parser caps confidence at 0.6. Timings come from Docker Desktop on a developer
-machine (not 4 vCPU) and the first photo includes loading the OCR models.
+machine (16 CPUs, 8 GB) and the first photo includes loading the OCR models. The "4 CPUs" figures were taken
+with Docker's CPU limit (`docker run --cpus=4`, a CFS quota on those 16 CPUs), not on a 4-core machine: cache,
+memory bandwidth and clock speed differ, so read them as an estimate for the target machine.
 
 ### Fiscal QR code
 
@@ -159,5 +161,7 @@ Product decisions and feature flags live in one file, the only source of these v
 
 All other settings are environment variables prefixed `BASKETIQ_` (see `src/basketiq/config.py`).
 Notable: `CONFIDENCE_THRESHOLD` (0.80), `RECONCILIATION_TOLERANCE_CENTS` (2), `RETENTION_DAYS` (30),
-`EXTERNAL_FALLBACK` (`disabled`|`mock`), `EXTERNAL_MONTHLY_BUDGET_CENTS` (0).
+`EXTERNAL_FALLBACK` (`disabled`|`mock`), `EXTERNAL_MONTHLY_BUDGET_CENTS` (0),
+`OCR_ENABLE_MKLDNN` (`true`): oneDNN CPU kernels for PaddleOCR, about 3x faster; set `false` on a host whose CPU
+lacks the instructions it needs. `paddlepaddle` is pinned to 3.2.2 because 3.3.1 fails with oneDNN.
 Per-merchant thresholds/tolerance and enabling are managed by operators via `/v1/admin/merchants`.
