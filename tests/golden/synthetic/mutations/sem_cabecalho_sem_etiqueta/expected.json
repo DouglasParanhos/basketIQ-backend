@@ -1,0 +1,40 @@
+{
+  "merchant": "UNKNOWN",
+  "route": "PDF_TEXT",
+  "purchase_at": "2026-10-04T09:41:00+01:00",
+  "total_cents": 591,
+  "lines": [
+    {
+      "raw_description": "BANANAS",
+      "quantity": "1.200",
+      "unit": "kg",
+      "unit_price_cents": 149,
+      "line_total_cents": 179,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "MACAS GALA",
+      "quantity": "0.850",
+      "unit": "kg",
+      "unit_price_cents": 220,
+      "line_total_cents": 187,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "LIMOES",
+      "quantity": "3",
+      "unit": "un",
+      "unit_price_cents": 35,
+      "line_total_cents": 105,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "ALFACE",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 120,
+      "line_total_cents": 120,
+      "discount_cents": 0
+    }
+  ]
+}

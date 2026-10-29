@@ -1,0 +1,40 @@
+{
+  "merchant": "UNKNOWN",
+  "route": "PDF_TEXT",
+  "purchase_at": "2026-10-02T11:20:00+01:00",
+  "total_cents": 2280,
+  "lines": [
+    {
+      "raw_description": "Pão de forma integral",
+      "quantity": "2",
+      "unit": "un",
+      "unit_price_cents": 129,
+      "line_total_cents": 258,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "Leite meio gordo 1L",
+      "quantity": "6",
+      "unit": "un",
+      "unit_price_cents": 79,
+      "line_total_cents": 474,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "Detergente roupa 2L",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 699,
+      "line_total_cents": 699,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "Azeite virgem extra",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 849,
+      "line_total_cents": 849,
+      "discount_cents": 0
+    }
+  ]
+}

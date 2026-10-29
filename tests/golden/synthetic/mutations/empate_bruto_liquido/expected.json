@@ -1,0 +1,40 @@
+{
+  "merchant": "UNKNOWN",
+  "route": "PDF_TEXT",
+  "purchase_at": "2026-10-06T18:30:00+01:00",
+  "total_cents": 2000,
+  "lines": [
+    {
+      "raw_description": "QUEIJO FLAMENGO FATIAS",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 450,
+      "line_total_cents": 450,
+      "discount_cents": 150
+    },
+    {
+      "raw_description": "CAFE MOIDO 250G",
+      "quantity": "2",
+      "unit": "un",
+      "unit_price_cents": 595,
+      "line_total_cents": 1190,
+      "discount_cents": 390
+    },
+    {
+      "raw_description": "BOLACHAS MARIA",
+      "quantity": "3",
+      "unit": "un",
+      "unit_price_cents": 100,
+      "line_total_cents": 300,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "PRESUNTO FATIADO",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 600,
+      "line_total_cents": 600,
+      "discount_cents": 0
+    }
+  ]
+}

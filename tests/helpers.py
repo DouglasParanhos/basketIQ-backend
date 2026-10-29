@@ -29,6 +29,16 @@ def doc_from_lines(
     return DocumentText(lines=group_into_lines(tokens), route=route, engine="test")
 
 
+def doc_from_cells(rows: list[list[tuple[str, float, float]]]) -> DocumentText:
+    """A searchable PDF as the words with their x positions: each row is a list of (text, x0, x1)."""
+    tokens = [
+        TextToken(text=text, x0=x0, y0=i * 12, x1=x1, y1=i * 12 + 8)
+        for i, row in enumerate(rows)
+        for text, x0, x1 in row
+    ]
+    return DocumentText(lines=group_into_lines(tokens), route=ProcessingRoute.PDF_TEXT, engine="test")
+
+
 class FakeOcr:
     """Deterministic OCR: returns the configured lines whatever the image is."""
 

@@ -1,0 +1,32 @@
+{
+  "merchant": "UNKNOWN",
+  "route": "PDF_TEXT",
+  "purchase_at": "2026-10-04T17:05:00+01:00",
+  "total_cents": 972,
+  "lines": [
+    {
+      "raw_description": "GEL DUCHE FRESCO 250 ML",
+      "quantity": "2",
+      "unit": "un",
+      "unit_price_cents": 299,
+      "line_total_cents": 598,
+      "discount_cents": 100
+    },
+    {
+      "raw_description": "BROA DE MILHO 400G",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 189,
+      "line_total_cents": 189,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "MACA GALA",
+      "quantity": "3",
+      "unit": "un",
+      "unit_price_cents": 95,
+      "line_total_cents": 285,
+      "discount_cents": 0
+    }
+  ]
+}

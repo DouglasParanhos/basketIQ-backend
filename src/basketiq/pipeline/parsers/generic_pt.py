@@ -9,6 +9,15 @@ layout. It recognises the common shapes of an invoice line and stops at the tota
     DESCRIPTION  2 X 1,65  3,30   <- count and unit price inside the line
     0,298 kg x 1,99 €/kg          <- quantity line, printed before or after the line it belongs to
     DESCONTO 0,46-€               <- discount on the previous line
+    (A) DESCRIPTION               <- description alone, its count and prices on the next line:
+    3 X 2,69 8,07                    quantity, unit price and line total
+    POUPANCA 4,00                 <- a saving, with no sign: on the previous line, or on the next one when
+                                     the receipt prints its savings first
+    Frutaria:                     <- a section title, skipped
+
+A searchable PDF with a column header ("Produtos  Preço unitário  Tipo imposto  Quantidade  TOTAL") is read
+by columns (`table.py`). The total is chosen among the printed ones by the lines and the payments
+(`totals.py`).
 
 A quantity line belongs to the neighbouring line whose total it explains (count × unit price), so the
 layout does not have to be known: Lidl prints it after the item, Aldi before it.
@@ -23,19 +32,21 @@ import re
 from decimal import Decimal
 
 from basketiq.domain.money import multiply_cents, parse_decimal, parse_money_cents
-from basketiq.domain.status import Merchant, Unit
+from basketiq.domain.status import Merchant, ProcessingRoute, Unit
 from basketiq.pipeline.parsers.base import (
     MONEY,
     RULE_EXACT,
     build_item,
     choose_purchase_datetime,
-    find_amount,
+    flag_ambiguous_unit,
     guess_merchant_name,
     is_weight_quantity,
     parse_date_candidates,
     terminal_store_label,
     unresolved_line,
 )
+from basketiq.pipeline.parsers.table import is_header_row, table_items
+from basketiq.pipeline.parsers.totals import choose_total, settle_savings
 from basketiq.pipeline.schema import AMOUNT_TOKEN, DocumentText, ParsedLine, ParsedReceipt, TextLine
 
 CONFIDENCE_CAP = 0.6
@@ -46,7 +57,7 @@ _EURO = r"(?:\s*(?:€|EUR))?"
 _TAX = r"(?:\s*[A-Z0-9]){0,2}"  # the VAT class, and a stray character the OCR may add after it
 _ITEM = re.compile(
     rf"^(?:\(?[A-Z]\)?\s+)?(?:(?P<lead>\d{{1,2}})\s+)?(?P<desc>.*?[A-Za-zÀ-ÿ]{{2}}.*?)\s+"
-    rf"(?:(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?:kg|un)?\s*[xX×]\s*(?P<unit>{MONEY}){_EURO}\s+"
+    rf"(?:(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?P<qunit>kg|un)?\s*[xX×]\s*(?P<unit>{MONEY}){_EURO}\s+"
     rf"|(?P<unit2>{MONEY}){_EURO}\s+(?=-?{MONEY}))?"
     rf"(?P<total>-?{MONEY}){_EURO}{_TAX}$"
 )
@@ -74,6 +85,13 @@ _STOP = re.compile(
     r"^(SUBTOTAL|TOTAL|A\s+PAGAR|IVA\b|TAXA|MULTIBANCO|NUMER[AÁ]RIO|TROCO|PAGAMENTO|Valor\s+dep[oó]sito)",
     re.I,
 )
+# "3 X 2,69 8,07": quantity, unit price and line total, under the line that names the product
+_QTY_TOTAL = re.compile(
+    rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*[xX×]\s*(?P<unit>{MONEY}){_EURO}\s+(?P<total>{MONEY}){_EURO}{_TAX}$"
+)
+_SAVING_PLAIN = re.compile(rf"^(?:Poupan[çc]a|Desconto)\s+(?P<amount>{MONEY}){_EURO}$", re.I)
+_CATEGORY = re.compile(r"^[A-Za-zÀ-ÿ&/+.' -]+:$")  # "Charcutaria&Queijos:"
+_TAGGED = re.compile(r"^\((?P<tax>[A-Z0-9])\)\s+(?P<desc>.+)$")  # "(A) QUEIJO FRESCO"
 _AMOUNT_ONLY = re.compile(rf"^(?P<total>{MONEY}){_EURO}{_TAX}$")
 _HEADER_NOISE = re.compile(r"^(?:DENOMINA[CÇ][AÃ]O|DESCRI[CÇ][AÃ]O)\s+|\s+PRE[CÇ]O\s+IVA$", re.I)
 
@@ -83,19 +101,30 @@ class GenericPtParser:
     cap = CONFIDENCE_CAP
     stop = _STOP
     total = _TOTAL
+    geometry = True  # read a searchable PDF's column table by x position, when it has a header
 
     def __init__(self, merchant: Merchant) -> None:
         self.merchant = merchant
 
     def parse(self, doc: DocumentText) -> ParsedReceipt:
         lines = doc.lines
-        end = next((i for i, line in enumerate(lines) if self.stop.match(line.text.strip())), len(lines))
-        parsed = self._items(lines[self._start(lines[:end]) : end])
+        end = next(
+            (
+                i
+                for i, line in enumerate(lines)
+                if self.stop.match(line.text.strip()) and not is_header_row(line.text.strip())
+            ),
+            len(lines),
+        )
+        parsed = table_items(lines, end) if self.geometry and doc.route == ProcessingRoute.PDF_TEXT else None
+        if parsed is None:
+            parsed = self._items(lines[self._start(lines[:end]) : end])
 
         for item in parsed:
             item.field_confidence = {k: round(min(v, self.cap), 3) for k, v in item.field_confidence.items()}
 
-        total, _, _ = find_amount(lines[end:], self.total)
+        total = choose_total(lines[end:], parsed, self.total)
+        settle_savings(parsed, total)
         purchase_at, date_conf = choose_purchase_datetime(parse_date_candidates(lines))
         return ParsedReceipt(
             merchant=self.merchant,
@@ -114,7 +143,12 @@ class GenericPtParser:
 
     def _start(self, head: list[TextLine]) -> int:
         """Index of the first item line in the part of the receipt before the total."""
-        return next((i for i, line in enumerate(head) if _ITEM.match(_text(line))), len(head))
+        for i, line in enumerate(head):
+            if _ITEM.match(_text(line)) or _saving(_text(line)) is not None:
+                return i  # a saving before the first item: the receipt prints its savings first
+            if i + 1 < len(head) and _QTY_TOTAL.match(_text(head[i + 1])) and _names_a_product(_text(line)):
+                return i  # the description alone, with its quantity and prices on the next line
+        return len(head)
 
     def _store(self, lines: list[TextLine]) -> str | None:
         return terminal_store_label(lines)
@@ -123,8 +157,18 @@ class GenericPtParser:
         parsed: list[ParsedLine] = []
         pending_qty: re.Match[str] | None = None  # quantity line waiting for the item it explains
         pending_text = ""
-        pending_description: str | None = None  # description waiting for a "1,004 kg 2,50 €/kg 2,51" line
+        pending_description: str | None = None  # description waiting for its quantity and prices line
+        pending_tax: str | None = None  # the "(A)" printed before that description
         pending_amount: TextLine | None = None  # a price alone on its row, waiting for its description
+        pending_saving: tuple[int, float] | None = None  # a saving printed before its item (see below)
+        savings_first = _savings_first(zone)
+
+        def add(item: ParsedLine) -> None:
+            nonlocal pending_saving
+            if pending_saving is not None and not item.unresolved:
+                _apply_saving(item, *pending_saving, cap=self.cap)
+                pending_saving = None
+            parsed.append(item)
 
         def flush_amount() -> None:
             nonlocal pending_amount
@@ -134,29 +178,49 @@ class GenericPtParser:
 
         for line in zone:
             text = _text(line)
-            if m := _DISCOUNT.match(text):
-                if parsed and not parsed[-1].unresolved:
-                    parsed[-1].discount_cents += abs(parse_money_cents(m.group("a1") or m.group("a2")) or 0)
-                    parsed[-1].field_confidence["discount"] = self.cap * line.confidence
+            if _CATEGORY.match(text):  # a section title: it names no product
+                flush_amount()
+                pending_description = pending_tax = None
+                continue
+            if (saving := _saving(text)) is not None:
+                if savings_first:
+                    pending_saving = (saving, line.confidence)
+                elif parsed and not parsed[-1].unresolved:
+                    _apply_saving(parsed[-1], saving, line.confidence, cap=self.cap)
                     parsed[-1].evidence.append(text)
                 continue
             if m := _WEIGHED_LINE.match(text):
                 description = m.group("desc") or pending_description
                 if description:
-                    parsed.append(
+                    add(
                         build_item(
                             description=description,
                             total_text=m.group("total"),
                             qty_text=m.group("qty"),
                             unit_price_text=m.group("unit"),
                             weight_unit=Unit.KG,
+                            unit_printed=True,  # the weighed line says kg
                             line_conf=line.confidence,
                             evidence=[description, text],
                         )
                     )
                 else:
                     parsed.append(unresolved_line(line))
-                pending_description = None
+                pending_description = pending_tax = None
+                continue
+            if (m := _QTY_TOTAL.match(text)) and pending_description:
+                add(
+                    build_item(
+                        description=pending_description,
+                        total_text=m.group("total"),
+                        qty_text=m.group("qty"),
+                        unit_price_text=m.group("unit"),
+                        tax_code=pending_tax,
+                        line_conf=line.confidence,
+                        evidence=[pending_description, text],
+                    )
+                )
+                pending_description = pending_tax = None
                 continue
             if m := _QTY_LINE.match(text):
                 if parsed and not parsed[-1].unresolved and _explains(m, parsed[-1]):
@@ -164,36 +228,70 @@ class GenericPtParser:
                 else:
                     pending_qty = m
                     pending_text = text
-                pending_description = None
+                pending_description = pending_tax = None
                 continue
             if m := _ITEM.match(text):
                 flush_amount()
                 item = _item(m, line, text)
                 if pending_qty is not None and _explains(pending_qty, item):
                     _apply_quantity(item, pending_qty, line.confidence, pending_text)
-                pending_qty = pending_description = None
-                parsed.append(item)
+                pending_qty = pending_description = pending_tax = None
+                add(item)
             elif _AMOUNT_ONLY.match(text):  # a price alone: the OCR put it on a row of its own
                 flush_amount()
                 if pending_description:
-                    parsed.append(_orphan_item(pending_description, line))
-                    pending_description = None
+                    add(_orphan_item(pending_description, line))
+                    pending_description = pending_tax = None
                 else:
                     pending_amount = line
                 pending_qty = None
             elif re.search(MONEY, text):
                 flush_amount()
                 parsed.append(unresolved_line(line))
-                pending_qty = pending_description = None
+                pending_qty = pending_description = pending_tax = None
             elif re.search(r"[A-Za-zÀ-ÿ]{3}", text):  # a description alone
-                description = re.sub(r"^\d{1,2}\s+", "", text)  # "1 COUVE-FLOR": the 1 is a count
+                tagged = _TAGGED.match(text)
+                description = re.sub(
+                    r"^\d{1,2}\s+", "", tagged.group("desc") if tagged else text
+                )  # "1 COUVE-FLOR"
                 if pending_amount is not None:
-                    parsed.append(_orphan_item(description, pending_amount))
-                    pending_amount = pending_description = None
+                    add(_orphan_item(description, pending_amount))
+                    pending_amount = pending_description = pending_tax = None
                 else:
                     pending_description = description
+                    pending_tax = tagged.group("tax") if tagged else None
         flush_amount()
         return parsed
+
+
+def _saving(text: str) -> int | None:
+    """The amount of a saving line ("Poupança Imediata (0,60)", "DESCONTO 0,46-€", "POUPANCA 4,00")."""
+    if m := _DISCOUNT.match(text):
+        return abs(parse_money_cents(m.group("a1") or m.group("a2")) or 0)
+    if m := _SAVING_PLAIN.match(text):
+        return parse_money_cents(m.group("amount"))
+    return None
+
+
+def _savings_first(zone: list[TextLine]) -> bool:
+    """A receipt that prints each saving before its item has a saving as the first line with an amount."""
+    first = next((t for line in zone if re.search(MONEY, t := _text(line))), "")
+    return _saving(first) is not None
+
+
+def _apply_saving(item: ParsedLine, cents: int, confidence: float, *, cap: float) -> None:
+    item.discount_cents += cents
+    item.field_confidence["discount"] = cap * confidence
+
+
+def _names_a_product(text: str) -> bool:
+    """A line that could be the name of a product: letters, no amount, not a title or a column header."""
+    return (
+        bool(re.search(r"[A-Za-zÀ-ÿ]{3}", text))
+        and not re.search(MONEY, text)
+        and not _CATEGORY.match(text)
+        and not is_header_row(text)
+    )
 
 
 def _text(line: TextLine) -> str:
@@ -248,6 +346,7 @@ def _item(m: re.Match[str], line: TextLine, text: str) -> ParsedLine:
         total_text=m.group("total"),
         qty_text=qty,
         unit_price_text=unit if qty else None,
+        unit_printed=bool(m.group("qunit")),
         line_conf=line.confidence,
         evidence=[text],
     )
@@ -310,3 +409,4 @@ def _apply_quantity(item: ParsedLine, qty_line: re.Match[str], conf: float, evid
     item.unit_price_cents = parse_money_cents(qty_line.group("unit"))
     item.field_confidence["quantity"] = item.field_confidence["unit_price"] = round(RULE_EXACT * conf, 3)
     item.evidence.append(evidence)
+    flag_ambiguous_unit(item, qty_line.group("qty"), bool(qty_line.group("kg")))

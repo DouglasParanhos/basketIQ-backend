@@ -392,6 +392,8 @@ def main() -> None:
         lambda p: render_image(lidl_lines, quality="medium").save(p),
     )
 
+    write_mutations()
+
     # --- Negative fixtures for validation tests ---------------------------------------------
     NEG.mkdir(parents=True, exist_ok=True)
     good = (OUT / "pingo_doce_text" / "document.pdf").read_bytes()
@@ -408,6 +410,230 @@ def main() -> None:
     (NEG / "blank.png").write_bytes(_png(Image.new("RGB", (600, 900), "white")))
     (NEG / "dark.jpg").write_bytes(_jpeg(Image.new("RGB", (600, 900), (10, 10, 10))))
     print(f"fixtures written to {OUT} and {NEG}")
+
+
+# --- Mutations of the real searchable-PDF layouts, with invented shops and products ---------------
+# They are what the generic parser is judged on besides the real receipts (spec 009, A2.1): the same
+# ideas as the real layouts (column table with a two-line header, description above its prices, savings
+# before or after the line, card balance, voucher) moved to places the parser was not written for.
+
+
+def _line(
+    desc: str, qty: str, unit_cents: int, total_cents: int, discount: int = 0, unit: str = "un"
+) -> dict:
+    return {
+        "raw_description": desc,
+        "quantity": qty,
+        "unit": unit,
+        "unit_price_cents": unit_cents,
+        "line_total_cents": total_cents,
+        "discount_cents": discount,
+    }
+
+
+def _mutation(purchase_at: str, total: int, lines: list[dict]) -> dict:
+    return {
+        "merchant": "UNKNOWN",
+        "route": "PDF_TEXT",
+        "purchase_at": purchase_at,
+        "total_cents": total,
+        "lines": lines,
+    }
+
+
+def _euros(cents: int) -> str:
+    return f"{cents // 100},{cents % 100:02d}"
+
+
+def write_grid_pdf(path: Path, rows: list[list[tuple[float, str, str]]], width_mm: float = 170) -> None:
+    """Each row is a list of (x in mm, text, "l" or "r" for left or right aligned at x)."""
+    buf = io.BytesIO()
+    height = (len(rows) * 5 + 30) * mm
+    c = canvas.Canvas(buf, pagesize=(width_mm * mm, height))
+    c.setFont("Helvetica", 8)
+    y = height - 15 * mm
+    for row in rows:
+        for x, text, align in row:
+            (c.drawRightString if align == "r" else c.drawString)(x * mm, y, text)
+        y -= 5 * mm
+    c.showPage()
+    c.save()
+    path.write_bytes(buf.getvalue())
+
+
+def _grid_case() -> tuple[list[list[tuple[float, str, str]]], dict]:
+    """Column order moved (quantity before price, total before the VAT class) and a header on two lines."""
+    items = [
+        ("Pão de forma integral", 2, 129, "A"),
+        ("Leite meio gordo 1L", 6, 79, "A"),
+        ("Detergente roupa 2L", 1, 699, "C"),
+        ("Azeite virgem extra", 1, 849, "A"),
+    ]
+    rows: list[list[tuple[float, str, str]]] = [
+        [(10, "Mercearia Aurora, Lda", "l")],
+        [(10, "Data: 2026-10-02 11:20", "l")],
+        [],
+        [
+            (10, "Artigo", "l"),
+            (95, "Qtd.", "r"),
+            (112, "Preço", "r"),
+            (135, "Total", "r"),
+            (158, "Taxa", "r"),
+        ],
+        [(112, "unitário", "r"), (158, "IVA", "r")],
+    ]
+    lines = []
+    total = 0
+    for name, qty, unit, tax in items:
+        line_total = qty * unit
+        total += line_total
+        rows.append(
+            [
+                (10, name, "l"),
+                (95, str(qty), "r"),
+                (112, _euros(unit), "r"),
+                (113, "€", "l"),
+                (135, _euros(line_total), "r"),
+                (136, "€", "l"),
+                (158, tax, "r"),
+            ]
+        )
+        lines.append(_line(name, str(qty), unit, line_total))
+    rows += [[], [(120, "TOTAL", "l"), (150, _euros(total), "r"), (151, "€", "l")]]
+    rows += [[(10, "Multibanco", "l"), (150, _euros(total), "r"), (151, "€", "l")]]
+    return rows, _mutation("2026-10-02T11:20:00+01:00", total, lines)
+
+
+def write_mutations() -> None:
+    rows, expected = _grid_case()
+    write_case("mutations/colunas_ordem_trocada", "document.pdf", expected, lambda p: write_grid_pdf(p, rows))
+
+    # Description above its "qty X price total" line, no VAT tag on some, section titles, savings after the
+    # line, prices already net of the saving, and a card balance used as payment.
+    text = [
+        "Mini-Mercado Aurora",
+        "Fatura Simplificada Original",
+        "Nro:FS AB1/000123 04/10/2026 17:05",
+        "NIF: Consumidor Final",
+        "DESCRICAO VALOR",
+        "Higiene:",
+        "GEL DUCHE FRESCO 250 ML",
+        "2 X 2,49 4,98",
+        "POUPANCA 1,00",
+        "Padaria:",
+        "(A) BROA DE MILHO 400G 1,89",
+        "Frutas:",
+        "(A) MACA GALA",
+        "3 X 0,95 2,85",
+        "SUBTOTAL 9,72",
+        "Desconto Cartao Utilizado 5,00",
+        "TOTAL A PAGAR 4,72",
+        "Multibanco 4,72",
+    ]
+    expected = _mutation(
+        "2026-10-04T17:05:00+01:00",
+        972,
+        [
+            _line("GEL DUCHE FRESCO 250 ML", "2", 299, 598, 100),
+            _line("BROA DE MILHO 400G", "1", 189, 189),
+            _line("MACA GALA", "3", 95, 285),
+        ],
+    )
+    write_case(
+        "mutations/duas_linhas_poupanca_depois", "document.pdf", expected, lambda p: write_text_pdf(p, text)
+    )
+
+    # Each saving is printed before its line, prices as on the shelf: gross 10,62, net 8,92.
+    text = [
+        "Loja do Bairro, Lda",
+        "Artigos",
+        "LATICINIOS",
+        "      Poupanca Imediata (0,50)",
+        " C IOGURTE GREGO 4X125G 2,19",
+        "TALHO",
+        "      Poupanca Imediata (1,20)",
+        " C FRANGO INTEIRO 0,950 X 4,99 4,74",
+        "MERCEARIA",
+        " C ARROZ AGULHA 1KG 1,39",
+        " E SUMO LARANJA 1L 2 X 1,15 2,30",
+        "Resumo",
+        "TOTAL 10,62",
+        "TOTAL POUPANCA (1,70)",
+        "TOTAL A PAGAR 8,92",
+        "Pagamentos",
+        "Multibanco 8,92",
+        "000001 2026-10-05 10:15 0001 0001 0001",
+    ]
+    expected = _mutation(
+        "2026-10-05T10:15:00+01:00",
+        892,
+        [
+            _line("IOGURTE GREGO 4X125G", "1", 219, 219, 50),
+            _line("FRANGO INTEIRO", "0.950", 499, 474, 120, "kg"),
+            _line("ARROZ AGULHA 1KG", "1", 139, 139),
+            _line("SUMO LARANJA 1L", "2", 115, 230),
+        ],
+    )
+    write_case("mutations/poupanca_antes", "document.pdf", expected, lambda p: write_text_pdf(p, text))
+
+    # Gross and net both fit the lines (25,40 and 20,00): only what was paid (card + voucher) decides.
+    text = [
+        "Supermercado Estrela",
+        "Artigos",
+        " C QUEIJO FLAMENGO FATIAS 4,50",
+        "      Poupanca Imediata (1,50)",
+        " C CAFE MOIDO 250G 2 X 5,95 11,90",
+        "      Poupanca Imediata (3,90)",
+        " C BOLACHAS MARIA 3 X 1,00 3,00",
+        " C PRESUNTO FATIADO 6,00",
+        "Resumo",
+        "TOTAL 25,40",
+        "TOTAL POUPANCA (5,40)",
+        "TOTAL A PAGAR 20,00",
+        "Pagamentos",
+        "Multibanco 15,00",
+        "Vale desconto 5,00",
+        "000002 2026-10-06 18:30 0001 0001 0001",
+    ]
+    expected = _mutation(
+        "2026-10-06T18:30:00+01:00",
+        2000,
+        [
+            _line("QUEIJO FLAMENGO FATIAS", "1", 450, 450, 150),
+            _line("CAFE MOIDO 250G", "2", 595, 1190, 390),
+            _line("BOLACHAS MARIA", "3", 100, 300),
+            _line("PRESUNTO FATIADO", "1", 600, 600),
+        ],
+    )
+    write_case("mutations/empate_bruto_liquido", "document.pdf", expected, lambda p: write_text_pdf(p, text))
+
+    # No header, no VAT tag, one label ("TOTAL"), a price on a row of its own and cash with change.
+    text = [
+        "Frutaria Sol",
+        "Fatura Simplificada",
+        "04/10/2026 09:41",
+        "BANANAS 1,200 X 1,49 1,79",
+        "MACAS GALA 0,850 X 2,20 1,87",
+        "LIMOES 3 X 0,35 1,05",
+        "ALFACE",
+        "1,20",
+        "TOTAL 5,91",
+        "Numerario 10,00",
+        "Troco 4,09",
+    ]
+    expected = _mutation(
+        "2026-10-04T09:41:00+01:00",
+        591,
+        [
+            _line("BANANAS", "1.200", 149, 179, unit="kg"),
+            _line("MACAS GALA", "0.850", 220, 187, unit="kg"),
+            _line("LIMOES", "3", 35, 105),
+            _line("ALFACE", "1", 120, 120),
+        ],
+    )
+    write_case(
+        "mutations/sem_cabecalho_sem_etiqueta", "document.pdf", expected, lambda p: write_text_pdf(p, text)
+    )
 
 
 def _png(img: Image.Image) -> bytes:

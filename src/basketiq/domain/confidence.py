@@ -181,7 +181,7 @@ def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
                     message="Preço da linha em falta.",
                 )
             )
-        for name in ("description", "quantity", "unit_price", "line_total", "discount"):
+        for name in ("description", "quantity", "unit", "unit_price", "line_total", "discount"):
             if name not in line.field_confidence and name not in line.edited_fields:
                 continue
             c = _effective(line.field_confidence, name, line.edited_fields)
@@ -189,12 +189,17 @@ def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
             if c < thresholds.for_field(name):
                 flags.append(f"low_confidence:{name}")
         if any(f.startswith("low_confidence") for f in flags) and "unresolved" not in flags:
+            fields = [f.split(":")[1] for f in flags if f.startswith("low_confidence")]
             reasons.append(
                 ReviewReason(
                     code="low_confidence",
                     line_index=i,
-                    message="Valores lidos com pouca confiança.",
-                    details={"fields": [f.split(":")[1] for f in flags if f.startswith("low_confidence")]},
+                    message=(
+                        "Unidade por confirmar: são unidades ou kg?"
+                        if fields == ["unit"]
+                        else "Valores lidos com pouca confiança."
+                    ),
+                    details={"fields": fields},
                 )
             )
         if flags:

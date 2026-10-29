@@ -49,7 +49,7 @@ _TAX = r"^\((?P<tax>[A-Z])\)\s+"
 _NAME = re.compile(rf"{_TAX}(?P<desc>.+)$")
 _ITEM = re.compile(rf"{_TAX}(?P<desc>.+?)\s+(?P<total>{MONEY})$")
 _QTY = re.compile(
-    rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?:kg)?\s*[Xx]\s*(?P<unit>{MONEY})(?:\s*(?:EUR|€)/kg)?"
+    rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?P<kg>kg)?\s*[Xx]\s*(?P<unit>{MONEY})(?:\s*(?:EUR|€)/kg)?"
     rf"\s+(?P<total>{MONEY})$",
     re.I,
 )
@@ -108,6 +108,7 @@ class ContinenteParser:
                         total_text=m.group("total"),
                         qty_text=m.group("qty"),
                         unit_price_text=m.group("unit"),
+                        unit_printed=bool(m.group("kg")),
                         tax_code=pending_name.group("tax"),
                         line_conf=min(line.confidence, name_line.confidence),
                         evidence=[name_line.text.strip(), text],

@@ -1,0 +1,40 @@
+{
+  "merchant": "UNKNOWN",
+  "route": "PDF_TEXT",
+  "purchase_at": "2026-10-05T10:15:00+01:00",
+  "total_cents": 892,
+  "lines": [
+    {
+      "raw_description": "IOGURTE GREGO 4X125G",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 219,
+      "line_total_cents": 219,
+      "discount_cents": 50
+    },
+    {
+      "raw_description": "FRANGO INTEIRO",
+      "quantity": "0.950",
+      "unit": "kg",
+      "unit_price_cents": 499,
+      "line_total_cents": 474,
+      "discount_cents": 120
+    },
+    {
+      "raw_description": "ARROZ AGULHA 1KG",
+      "quantity": "1",
+      "unit": "un",
+      "unit_price_cents": 139,
+      "line_total_cents": 139,
+      "discount_cents": 0
+    },
+    {
+      "raw_description": "SUMO LARANJA 1L",
+      "quantity": "2",
+      "unit": "un",
+      "unit_price_cents": 115,
+      "line_total_cents": 230,
+      "discount_cents": 0
+    }
+  ]
+}

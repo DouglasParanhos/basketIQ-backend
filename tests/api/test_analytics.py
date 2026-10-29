@@ -46,7 +46,7 @@ def lidl(date_iso: str, time: str, items: list[str], total: str) -> bytes:
 def history(client: TestClient, login: Any, storage: Any, run_jobs: Any) -> Any:
     login(client)
     docs = [
-        pingo("05/08/2026", "10:00", [" C LEITE MEIO GORDO 0,79", " C BANANA 1,000 X 1,50 1,50"], "2,29"),
+        pingo("05/08/2026", "10:00", [" C LEITE MEIO GORDO 0,79", " C BANANA 1,020 X 1,47 1,50"], "2,29"),
         pingo(
             "02/09/2026",
             "18:00",
@@ -122,9 +122,9 @@ def test_weighed_product_uses_price_per_kg(history: TestClient) -> None:
     banana = history.get("/v1/products?q=banana").json()[0]
     a = history.get(f"/v1/products/{banana['id']}/analytics").json()
     assert a["price_basis"] == "kg"
-    assert a["total_quantity"] == "1.5"
-    assert a["avg_price_cents"] == 153  # (150 + 80) / 1.5 kg
-    assert (a["min_price_cents"], a["max_price_cents"]) == (150, 160)
+    assert a["total_quantity"] == "1.52"
+    assert a["avg_price_cents"] == 151  # (150 + 80) / 1.52 kg
+    assert (a["min_price_cents"], a["max_price_cents"]) == (147, 160)
 
 
 @pytest.mark.req("RF-09")

@@ -37,6 +37,7 @@ _STORE = re.compile(r"^EL CORTE INGLES\s*-\s*(?P<store>LOJA\b.+)$", re.I)
 class ElCorteInglesParser(GenericPtParser):
     version = "el_corte_ingles-1.0"
     cap = CALIBRATED_CAP
+    geometry = False  # this parser reads its own PDF rows
 
     def __init__(self) -> None:
         super().__init__(Merchant.EL_CORTE_INGLES)
