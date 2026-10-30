@@ -15,6 +15,7 @@ from basketiq.config import Settings, get_settings
 from basketiq.db.models import User, UserSession
 from basketiq.db.session import get_sessionmaker
 from basketiq.domain.status import UserRole
+from basketiq.services import accounts
 
 ACCESS_COOKIE = "biq_at"
 REFRESH_COOKIE = "biq_rt"
@@ -111,7 +112,8 @@ CurrentUser = Annotated[User, Depends(current_user)]
 
 
 def consented_user(user: CurrentUser) -> User:
-    if user.privacy_accepted_at is None:
+    # `current_user` stays open: without a valid consent one can still consent, see the account or leave.
+    if not accounts.has_current_consent(user):
         raise ApiError(403, "privacy_consent_required", "Aceite a política de privacidade para continuar.")
     return user
 

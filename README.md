@@ -33,6 +33,14 @@ Key decisions (and deviations from the spec, with reasons):
 - **Sessions**: 15-minute JWT access cookie + rotating refresh token (hash stored, reuse detection
   revokes the session), CSRF double-submit header, all cookies `HttpOnly`/`SameSite=Lax`.
 - Money is integer cents; quantities `NUMERIC(12,3)`; purchase times are Europe/Lisbon.
+- **Profile and consent (RF-13, RF-14)**: an optional `user_profiles` row per person (household, usual merchants,
+  goals, monthly goal in cents), saved with `PATCH /v1/me/profile` (an omitted field is kept, `null` clears) and
+  deleted with the account. A consent counts only for the `PRIVACY_POLICY_VERSION` it was given to: with another
+  version, or none, every endpoint that needs consent answers 403 `privacy_consent_required` until the person
+  consents again. `GET /v1/merchants` is the only source of the merchant names.
+- **Stored originals (RF-12)**: `GET` and `DELETE /v1/receipts/stored-files` count and delete the original files of
+  confirmed receipts, at most 500 receipts a call (`remaining` tells when to repeat). The routes are declared
+  before `/{receipt_id}`, a UUID parameter that would otherwise answer 422.
 
 ## Parsers and calibration
 
@@ -145,9 +153,10 @@ Product decisions and feature flags live in one file, the only source of these v
 |---|---|---|
 | `APP_NAME_FOR_CUSTOMER` | `Super Mercado` | Name customers see: login, page title, settings, installed-app name. 1–40 characters. |
 | `LLM_ENABLED` | `false` | Local LLM agent (Agno + Ollama) for receipt lines the parser could not read. |
+| `SMART_LIST_ENABLED` | `false` | Shows the smart shopping list («Lista») in the app. Off until the list is built and approved; the client reads it from `GET /v1/config`. |
 
-- Every key is required and has no default in code. Unknown keys, wrong types (`LLM_ENABLED` must be a
-  real boolean), an empty or over-long name, or a missing file stop the API and the worker at start-up.
+- Every key is required and has no default in code. Unknown keys, wrong types (`LLM_ENABLED` and `SMART_LIST_ENABLED` must be
+  real booleans), an empty or over-long name, or a missing file stop the API and the worker at start-up.
 - Changing a value means editing the file and restarting the API and worker. The file is mounted into the
   containers (`./config:/app/config:ro`) and copied into the images.
 - The old `BASKETIQ_LLM_ENABLED` variable is rejected at start-up so it cannot be silently ignored.

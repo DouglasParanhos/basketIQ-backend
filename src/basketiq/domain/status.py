@@ -115,6 +115,31 @@ class Unit(StrEnum):
     ML = "ml"
 
 
+# Name shown to the user for each supported merchant (the API is the only source of these names).
+MERCHANT_NAMES: dict[Merchant, str] = {
+    Merchant.CONTINENTE: "Continente",
+    Merchant.PINGO_DOCE: "Pingo Doce",
+    Merchant.LIDL: "Lidl",
+    Merchant.AUCHAN: "Auchan",
+    Merchant.ALDI: "Aldi",
+    Merchant.MERCADONA: "Mercadona",
+    Merchant.EL_CORTE_INGLES: "El Corte Inglés",
+}
+
+
+class Goal(StrEnum):
+    """What the person wants from the app (onboarding). «All of the above» is the three together."""
+
+    FINANCES = "finances"
+    SHOPPING_LIST = "shopping_list"
+    SAVINGS = "savings"
+
+
+# Limits of the profile (RF-13), used by the request validation and the table's CHECK constraints.
+HOUSEHOLD_SIZE_RANGE = (1, 12)
+MONTHLY_GOAL_CENTS_RANGE = (5_000, 80_000)  # 50 € to 800 €
+
+
 class UserRole(StrEnum):
     USER = "user"
     ADMIN = "admin"

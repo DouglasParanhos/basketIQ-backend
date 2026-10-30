@@ -17,6 +17,7 @@ AppConfigDep = Annotated[AppConfig, Depends(get_app_config)]
 
 class PublicConfigOut(BaseModel):
     app_name: str
+    smart_list_enabled: bool
 
 
 # Colours and icon paths of the installed app. The icons are the Frontend's public/icons files.
@@ -44,7 +45,9 @@ MANIFEST_STATIC: dict[str, Any] = {
 
 @router.get("", response_model=PublicConfigOut, summary="Customer-facing configuration (no sign-in needed)")
 def public_config(config: AppConfigDep) -> PublicConfigOut:
-    return PublicConfigOut(app_name=config.app_name_for_customer)
+    return PublicConfigOut(
+        app_name=config.app_name_for_customer, smart_list_enabled=config.smart_list_enabled
+    )
 
 
 @router.get("/manifest.webmanifest", summary="Web app manifest with the configured product name")

@@ -5,9 +5,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic_core import PydanticCustomError
 
-from basketiq.domain.status import Merchant, ReceiptStatus
+from basketiq.domain.status import (
+    HOUSEHOLD_SIZE_RANGE,
+    MONTHLY_GOAL_CENTS_RANGE,
+    SUPPORTED_MERCHANTS,
+    Goal,
+    Merchant,
+    ReceiptStatus,
+)
 
 # ---------------------------------------------------------------- account
 
@@ -26,6 +34,85 @@ class MeOut(BaseModel):
 class DeletionResult(BaseModel):
     receipts_deleted: int
     objects_deleted: int
+
+
+# ---------------------------------------------------------------- profile (RF-13, RF-14)
+
+
+class ProfileOut(BaseModel):
+    household_size: int | None
+    merchants: list[str]
+    goals: list[Goal]
+    monthly_goal_cents: int | None
+    onboarding_completed_at: datetime | None
+
+
+class ProfilePatch(BaseModel):
+    """Only the fields present in the request are applied (`model_fields_set`): omitted keeps the value,
+    `null` clears the scalar fields. Lists are never `null`: `[]` clears them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    household_size: StrictInt | None = None
+    merchants: list[str] = Field(default_factory=list)
+    goals: list[Goal] = Field(default_factory=list)
+    monthly_goal_cents: StrictInt | None = None  # whole cents, never a decimal (constitution II)
+    onboarding_completed: Literal[True] = True
+
+    @field_validator("household_size")
+    @classmethod
+    def _household_size(cls, value: int | None) -> int | None:
+        low, high = HOUSEHOLD_SIZE_RANGE
+        if value is not None and not low <= value <= high:
+            raise PydanticCustomError(
+                "out_of_range", "Indique entre {low} e {high} pessoas.", {"low": low, "high": high}
+            )
+        return value
+
+    @field_validator("monthly_goal_cents")
+    @classmethod
+    def _monthly_goal(cls, value: int | None) -> int | None:
+        low, high = MONTHLY_GOAL_CENTS_RANGE
+        if value is not None and not low <= value <= high:
+            raise PydanticCustomError(
+                "out_of_range",
+                "A meta pessoal vai de {low} € a {high} €.",
+                {"low": low // 100, "high": high // 100},
+            )
+        return value
+
+    @field_validator("merchants")
+    @classmethod
+    def _merchants(cls, value: list[str]) -> list[str]:
+        for merchant in value:
+            if merchant not in SUPPORTED_MERCHANTS:
+                raise PydanticCustomError(
+                    "unsupported_merchant", "Mercado não suportado: {merchant}.", {"merchant": merchant}
+                )
+        return list(dict.fromkeys(value))
+
+    @field_validator("goals")
+    @classmethod
+    def _goals(cls, value: list[Goal]) -> list[Goal]:
+        return list(dict.fromkeys(value))
+
+
+class MerchantOut(BaseModel):
+    id: str
+    name: str
+
+
+# ---------------------------------------------------------------- stored original files (RF-12)
+
+
+class StoredFilesOut(BaseModel):
+    files: int
+
+
+class StoredFilesDeleted(BaseModel):
+    files_deleted: int
+    receipts: int
+    remaining: int
 
 
 # ---------------------------------------------------------------- uploads

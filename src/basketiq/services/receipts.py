@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, distinct, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from basketiq.config import Settings
@@ -17,6 +17,7 @@ from basketiq.domain.status import (
     EDITABLE_STATUSES,
     ERROR_STATUSES,
     PROCESSABLE_STATUSES,
+    ActorType,
     ConfirmedBy,
     JobStatus,
     LineReviewStatus,
@@ -572,13 +573,80 @@ def delete_receipt(db: Session, storage: ObjectStorage, user: User, receipt_id: 
     audit.record(db, "RECEIPT_DELETED", user_id=user.id, receipt_id=receipt_id)
 
 
+def erase_original(
+    db: Session,
+    storage: ObjectStorage,
+    receipt: Receipt,
+    *,
+    reason: str,
+    actor: ActorType = ActorType.USER,
+    now: datetime | None = None,
+) -> None:
+    """Remove the original and every derivative of a receipt; the structured data stays."""
+    storage.delete_prefix(receipt_prefix(receipt.user_id, receipt.id))
+    receipt.original_deleted_at = now or datetime.now(UTC)
+    receipt.original_expires_at = None
+    receipt.version += 1
+    audit.record(
+        db, "ORIGINAL_DELETED", user_id=receipt.user_id, receipt_id=receipt.id, actor=actor, reason=reason
+    )
+
+
 def delete_original(db: Session, storage: ObjectStorage, user: User, receipt_id: uuid.UUID) -> Receipt:
     receipt = get_owned(db, user, receipt_id, for_update=True)
     if receipt.processing_status not in (ReceiptStatus.CONFIRMED, *ERROR_STATUSES, *EDITABLE_STATUSES):
         raise ServiceError(409, "invalid_state", "Aguarde o fim do processamento.")
-    storage.delete_prefix(receipt_prefix(user.id, receipt.id))
-    receipt.original_deleted_at = datetime.now(UTC)
-    receipt.original_expires_at = None
-    receipt.version += 1
-    audit.record(db, "ORIGINAL_DELETED", user_id=user.id, receipt_id=receipt.id, reason="user_request")
+    erase_original(db, storage, receipt, reason="user_request")
     return receipt
+
+
+# «Delete all my originals» (RF-12): only confirmed receipts, so a receipt still in review keeps the
+# original it may need to be reprocessed. One call removes at most this many receipts' originals.
+STORED_FILES_BATCH = 500
+
+
+@dataclass(frozen=True)
+class StoredFilesErased:
+    files_deleted: int
+    receipts: int
+    remaining: int
+
+
+def _with_stored_original(user_id: uuid.UUID) -> tuple[ColumnElement[bool], ...]:
+    return (
+        Receipt.user_id == user_id,
+        Receipt.processing_status == ReceiptStatus.CONFIRMED,
+        Receipt.original_deleted_at.is_(None),
+    )
+
+
+def stored_files_summary(db: Session, user: User) -> int:
+    """Files still stored: the first file of each receipt plus its extra photos."""
+    total = db.scalar(
+        select(func.count(distinct(Receipt.id)) + func.count(ReceiptPhoto.id))
+        .select_from(Receipt)
+        .outerjoin(ReceiptPhoto, ReceiptPhoto.receipt_id == Receipt.id)
+        .where(*_with_stored_original(user.id))
+    )
+    return total or 0
+
+
+def delete_stored_files(db: Session, storage: ObjectStorage, user: User) -> StoredFilesErased:
+    stored = _with_stored_original(user.id)
+    batch = db.scalars(
+        select(Receipt)
+        .where(*stored)
+        .order_by(Receipt.created_at, Receipt.id)
+        .limit(STORED_FILES_BATCH)
+        .options(selectinload(Receipt.photos))
+        .with_for_update()
+    ).all()
+    files = sum(1 + len(receipt.photos) for receipt in batch)
+    for receipt in batch:
+        erase_original(db, storage, receipt, reason="user_bulk_request")
+    # The batch was read under lock: a short one means nothing is left, so only a full one needs the count
+    # (the query autoflushes the erased receipts first).
+    remaining = 0
+    if len(batch) == STORED_FILES_BATCH:
+        remaining = db.scalar(select(func.count()).select_from(Receipt).where(*stored)) or 0
+    return StoredFilesErased(files_deleted=files, receipts=len(batch), remaining=remaining)

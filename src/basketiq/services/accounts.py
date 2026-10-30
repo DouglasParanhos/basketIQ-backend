@@ -41,6 +41,11 @@ def accept_privacy(db: Session, user: User) -> None:
     audit.record(db, "PRIVACY_ACCEPTED", user_id=user.id, version=PRIVACY_POLICY_VERSION)
 
 
+def has_current_consent(user: User) -> bool:
+    """A consent counts only for the policy version it was given to; a missing version counts as none."""
+    return user.privacy_accepted_at is not None and user.privacy_version == PRIVACY_POLICY_VERSION
+
+
 def pseudonymous_id(user_id: object) -> str:
     return hashlib.sha256(str(user_id).encode()).hexdigest()[:16]
 

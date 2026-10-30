@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from basketiq.db.models import AuditEvent, ProcessingJob, Receipt
+from basketiq.db.models import AuditEvent, ProcessingJob, Receipt, UserProfile
 from basketiq.domain.status import JobStatus
 from tests.api.flows import import_receipt, process, upload
 from tests.helpers import FIXTURES, PINGO_LINES, PINGO_TOTAL, FakeOcr, make_pdf, make_png, synthetic
@@ -478,14 +478,18 @@ def test_abandoned_uploads_are_cleaned(client: TestClient, user: Any, storage: A
 
 
 @pytest.mark.req("F-23")
+@pytest.mark.req("F-107")
 def test_account_deletion_removes_everything(
     client: TestClient, user: Any, storage: Any, run_jobs: Any, db: Any
 ) -> None:
     import_receipt(client, storage, run_jobs, make_pdf(PINGO_LINES))
+    client.patch("/v1/me/profile", json={"household_size": 2, "monthly_goal_cents": 40_000})
+    assert db.scalar(select(func.count()).select_from(UserProfile)) == 1
     resp = client.delete("/v1/me")
     assert resp.status_code == 200 and resp.json()["receipts_deleted"] == 1
     assert storage.objects == {}
     assert db.scalar(select(func.count()).select_from(Receipt)) == 0
+    assert db.scalar(select(func.count()).select_from(UserProfile)) == 0  # the profile goes with the account
     assert client.get("/v1/me").status_code == 401
     events = db.scalars(select(AuditEvent)).all()
     assert all(e.user_id is None for e in events)  # audit trail kept, pseudonymised

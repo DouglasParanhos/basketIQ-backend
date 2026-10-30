@@ -20,8 +20,8 @@ from basketiq.db.session import session_scope
 from basketiq.domain.status import ActorType, ReceiptStatus
 from basketiq.observability.logging import configure_logging
 from basketiq.queue import JobQueue, get_queue
-from basketiq.services import audit
 from basketiq.services.processing import requeue_stuck_jobs
+from basketiq.services.receipts import erase_original
 from basketiq.storage import ObjectStorage, StorageUnavailableError, get_storage, receipt_prefix
 
 log = logging.getLogger(__name__)
@@ -37,17 +37,7 @@ def purge_expired_originals(db: Session, storage: ObjectStorage, now: datetime |
         .with_for_update(skip_locked=True)
     ).all()
     for receipt in due:
-        storage.delete_prefix(receipt_prefix(receipt.user_id, receipt.id))
-        receipt.original_deleted_at = now
-        receipt.version += 1
-        audit.record(
-            db,
-            "ORIGINAL_DELETED",
-            user_id=receipt.user_id,
-            receipt_id=receipt.id,
-            actor=ActorType.SYSTEM,
-            reason="retention",
-        )
+        erase_original(db, storage, receipt, reason="retention", actor=ActorType.SYSTEM, now=now)
     return len(due)
 
 

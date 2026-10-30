@@ -14,3 +14,8 @@ APP_NAME_FOR_CUSTOMER: Super Mercado
 # true needs the Ollama service (make up-llm); false never calls a LLM.
 # The external OCR/AI fallback is configured separately (BASKETIQ_EXTERNAL_FALLBACK).
 LLM_ENABLED: false
+
+# Smart shopping list (RF-16): shows the «Lista» destination in the app. It is built after step C and
+# stays false until it is approved: with false the client hides it. The client reads this value from
+# GET /v1/config. true or false only.
+SMART_LIST_ENABLED: false

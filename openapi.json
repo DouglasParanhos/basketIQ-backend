@@ -243,6 +243,91 @@
         }
       }
     },
+    "/v1/me/profile": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "The person's profile (empty until saved)",
+        "operationId": "get_profile_v1_me_profile_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Save the fields sent; omitted ones are kept",
+        "operationId": "update_profile_v1_me_profile_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/merchants": {
+      "get": {
+        "tags": [
+          "merchants"
+        ],
+        "summary": "Supported merchants, in a fixed order",
+        "operationId": "list_merchants_v1_merchants_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MerchantOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Merchants V1 Merchants Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/receipts/upload-init": {
       "post": {
         "tags": [
@@ -732,6 +817,106 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/receipts/stored-files": {
+      "get": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Original files still stored",
+        "operationId": "stored_files_v1_receipts_stored_files_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredFilesOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Delete the originals of confirmed receipts, up to 500 receipts a call (see `remaining`)",
+        "operationId": "delete_stored_files_v1_receipts_stored_files_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredFilesDeleted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -2537,6 +2722,16 @@
         ],
         "title": "FileRequirements"
       },
+      "Goal": {
+        "type": "string",
+        "enum": [
+          "finances",
+          "shopping_list",
+          "savings"
+        ],
+        "title": "Goal",
+        "description": "What the person wants from the app (onboarding). «All of the above» is the three together."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3115,6 +3310,24 @@
         ],
         "title": "MerchantConfigOut"
       },
+      "MerchantOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "MerchantOut"
+      },
       "MerchantPrice": {
         "properties": {
           "merchant": {
@@ -3583,12 +3796,17 @@
           "llm_enabled": {
             "type": "boolean",
             "title": "Llm Enabled"
+          },
+          "smart_list_enabled": {
+            "type": "boolean",
+            "title": "Smart List Enabled"
           }
         },
         "type": "object",
         "required": [
           "app_name_for_customer",
-          "llm_enabled"
+          "llm_enabled",
+          "smart_list_enabled"
         ],
         "title": "ProductConfigOut",
         "description": "Read-only view of config/app-config.yaml (one field per key in the file)."
@@ -3734,16 +3952,132 @@
         ],
         "title": "ProductSearchItem"
       },
+      "ProfileOut": {
+        "properties": {
+          "household_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Household Size"
+          },
+          "merchants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Merchants"
+          },
+          "goals": {
+            "items": {
+              "$ref": "#/components/schemas/Goal"
+            },
+            "type": "array",
+            "title": "Goals"
+          },
+          "monthly_goal_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Goal Cents"
+          },
+          "onboarding_completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onboarding Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "household_size",
+          "merchants",
+          "goals",
+          "monthly_goal_cents",
+          "onboarding_completed_at"
+        ],
+        "title": "ProfileOut"
+      },
+      "ProfilePatch": {
+        "properties": {
+          "household_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Household Size"
+          },
+          "merchants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Merchants"
+          },
+          "goals": {
+            "items": {
+              "$ref": "#/components/schemas/Goal"
+            },
+            "type": "array",
+            "title": "Goals"
+          },
+          "monthly_goal_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Goal Cents"
+          },
+          "onboarding_completed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Onboarding Completed",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ProfilePatch",
+        "description": "Only the fields present in the request are applied (`model_fields_set`): omitted keeps the value,\n`null` clears the scalar fields. Lists are never `null`: `[]` clears them."
+      },
       "PublicConfigOut": {
         "properties": {
           "app_name": {
             "type": "string",
             "title": "App Name"
+          },
+          "smart_list_enabled": {
+            "type": "boolean",
+            "title": "Smart List Enabled"
           }
         },
         "type": "object",
         "required": [
-          "app_name"
+          "app_name",
+          "smart_list_enabled"
         ],
         "title": "PublicConfigOut"
       },
@@ -4360,6 +4694,42 @@
           "spent_cents"
         ],
         "title": "SeriesPoint"
+      },
+      "StoredFilesDeleted": {
+        "properties": {
+          "files_deleted": {
+            "type": "integer",
+            "title": "Files Deleted"
+          },
+          "receipts": {
+            "type": "integer",
+            "title": "Receipts"
+          },
+          "remaining": {
+            "type": "integer",
+            "title": "Remaining"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files_deleted",
+          "receipts",
+          "remaining"
+        ],
+        "title": "StoredFilesDeleted"
+      },
+      "StoredFilesOut": {
+        "properties": {
+          "files": {
+            "type": "integer",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "StoredFilesOut"
       },
       "SummaryFilters": {
         "properties": {

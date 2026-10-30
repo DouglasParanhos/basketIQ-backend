@@ -32,6 +32,8 @@ from basketiq.api.schemas import (
     ReceiptPatchIn,
     ReceiptSummaryOut,
     ReviewReasonOut,
+    StoredFilesDeleted,
+    StoredFilesOut,
     Totals,
     UploadInitIn,
     UploadInitOut,
@@ -257,6 +259,22 @@ def list_receipts(
         last = rows[limit - 1][0]
         next_cursor = base64.urlsafe_b64encode(f"{last.created_at.isoformat()}|{last.id}".encode()).decode()
     return ReceiptPage(items=items, next_cursor=next_cursor)
+
+
+# «stored-files» is declared before «/{receipt_id}»: that parameter is a UUID, so a later declaration
+# would answer 422 to these two paths instead of reaching them.
+@router.get("/stored-files", response_model=StoredFilesOut, summary="Original files still stored")
+def stored_files(db: Db, user: ConsentedUser) -> StoredFilesOut:
+    return StoredFilesOut(files=svc.stored_files_summary(db, user))
+
+
+@router.delete(
+    "/stored-files",
+    response_model=StoredFilesDeleted,
+    summary="Delete the originals of confirmed receipts, up to 500 receipts a call (see `remaining`)",
+)
+def delete_stored_files(db: Db, storage: Storage, user: ConsentedUser) -> StoredFilesDeleted:
+    return StoredFilesDeleted.model_validate(svc.delete_stored_files(db, storage, user), from_attributes=True)
 
 
 @router.get("/{receipt_id}", response_model=ReceiptOut)

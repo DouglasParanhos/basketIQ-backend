@@ -8,12 +8,14 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -23,7 +25,14 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from basketiq.domain.status import JobStatus, LineReviewStatus, ReceiptStatus, UserRole
+from basketiq.domain.status import (
+    HOUSEHOLD_SIZE_RANGE,
+    MONTHLY_GOAL_CENTS_RANGE,
+    JobStatus,
+    LineReviewStatus,
+    ReceiptStatus,
+    UserRole,
+)
 
 
 class Base(DeclarativeBase):
@@ -52,6 +61,34 @@ class User(Base):
     privacy_version: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     last_login_at: Mapped[datetime | None]
+
+
+class UserProfile(Base):
+    """Optional personal profile (RF-13): household, usual merchants, goals and a monthly goal.
+
+    One row per user, created on the first update. Deleted with the user.
+    """
+
+    __tablename__ = "user_profiles"
+    __table_args__ = (
+        CheckConstraint(
+            "household_size BETWEEN {} AND {}".format(*HOUSEHOLD_SIZE_RANGE),
+            name="ck_user_profiles_household_size",
+        ),
+        CheckConstraint(
+            "monthly_goal_cents BETWEEN {} AND {}".format(*MONTHLY_GOAL_CENTS_RANGE),
+            name="ck_user_profiles_monthly_goal",
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    household_size: Mapped[int | None] = mapped_column(SmallInteger)
+    merchants: Mapped[list[Any]] = mapped_column(default=list, server_default="[]")
+    goals: Mapped[list[Any]] = mapped_column(default=list, server_default="[]")
+    monthly_goal_cents: Mapped[int | None] = mapped_column(BigInteger)
+    onboarding_completed_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
 
 class UserSession(Base):

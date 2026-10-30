@@ -119,6 +119,7 @@ def login(db: Session) -> Callable[..., Any]:
     """Create a user + session directly and put the session cookies on a client."""
     from basketiq.auth.sessions import create_session
     from basketiq.db.models import User
+    from basketiq.services import accounts
 
     def _login(c: TestClient, email: str | None = None, *, consent: bool = True, role: str = "user") -> User:
         from datetime import UTC, datetime
@@ -130,7 +131,7 @@ def login(db: Session) -> Callable[..., Any]:
                 email=email or f"{uuid.uuid4().hex[:8]}@example.test",
                 role=role,
                 privacy_accepted_at=datetime.now(UTC) if consent else None,
-                privacy_version="2026-10-15" if consent else None,
+                privacy_version=accounts.PRIVACY_POLICY_VERSION if consent else None,
             )
             s.add(user)
             s.flush()

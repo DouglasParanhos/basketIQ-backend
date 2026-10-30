@@ -34,6 +34,7 @@ class AppConfig(BaseModel):
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)
     ] = Field(alias="APP_NAME_FOR_CUSTOMER")
     llm_enabled: StrictBool = Field(alias="LLM_ENABLED")
+    smart_list_enabled: StrictBool = Field(alias="SMART_LIST_ENABLED")
 
 
 def config_path() -> Path:
