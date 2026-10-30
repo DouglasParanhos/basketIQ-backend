@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 
 from basketiq.domain.confidence import LineView, ReceiptView, Thresholds, evaluate
+from basketiq.domain.status import ProcessingRoute
 
 
 def view(**overrides) -> ReceiptView:  # type: ignore[no-untyped-def]
@@ -45,6 +46,20 @@ def codes(v: ReceiptView, t: Thresholds | None = None) -> set[str]:
 def test_confident_and_reconciled_is_auto_confirmable() -> None:
     ev = evaluate(view(), Thresholds())
     assert ev.auto_confirmable and ev.overall_confidence == 0.92
+
+
+@pytest.mark.req("F-55")
+def test_a_note_read_by_ocr_is_never_auto_confirmable() -> None:
+    ev = evaluate(view(route=ProcessingRoute.LOCAL_OCR), Thresholds())
+    assert [r.code for r in ev.reasons] == ["photo_not_verified"]
+    assert not ev.auto_confirmable
+    assert ev.reconciliation.within_tolerance and ev.overall_confidence == 0.92  # confident and reconciled
+    assert ev.blocking == []  # a person can still confirm it
+
+
+@pytest.mark.req("F-55")
+def test_a_note_not_read_by_ocr_keeps_its_automatic_confirmation() -> None:
+    assert "photo_not_verified" not in codes(view())
 
 
 @pytest.mark.req("F-12")

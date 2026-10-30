@@ -118,3 +118,5 @@ Só o A0. Os fluxos A1 a A7 não começam sem a linha de base e a confirmação 
   só então se decide uma regra
 - [x] T041 (commit j) O modo calibrado (sem `--unseen`) também imprime `per_route` e `overall`, para se poder comparar com os
   totais do modo `--unseen`; F-33
+- [x] T042 (por commitar) Regra provisória D1(a): nota lida por OCR (foto, captura, PDF digitalizado) vai sempre para revisão
+  com o motivo `photo_not_verified`, em `domain/confidence.py`; sai com a checagem de descrição (D1a); F-55

@@ -54,7 +54,10 @@ def test_high_confidence_receipt_is_confirmed_automatically(
 
 @pytest.mark.req("F-05")
 @pytest.mark.req("F-27")
-def test_image_goes_through_local_ocr(client: TestClient, user: Any, storage: Any, run_jobs: Any) -> None:
+@pytest.mark.req("F-55")
+def test_image_goes_through_local_ocr_and_waits_for_a_person(
+    client: TestClient, user: Any, storage: Any, run_jobs: Any
+) -> None:
     receipt = import_receipt(
         client,
         storage,
@@ -65,7 +68,12 @@ def test_image_goes_through_local_ocr(client: TestClient, user: Any, storage: An
         filename="foto.png",
     )
     assert receipt["processing"]["route"] == "LOCAL_OCR"
-    assert receipt["status"] == "CONFIRMED"
+    assert receipt["status"] == "REVIEW_REQUIRED"
+    assert [r["code"] for r in receipt["review_reasons"]] == ["photo_not_verified"]
+    assert receipt["totals"]["reconciled"] and receipt["can_confirm"]
+    body = {"version": receipt["version"]}
+    confirmed = client.post(f"/v1/receipts/{receipt['id']}/confirm", json=body).json()
+    assert confirmed["status"] == "CONFIRMED" and confirmed["confirmed_by"] == "USER"
 
 
 @pytest.mark.req("F-08")
@@ -144,7 +152,7 @@ def test_interrupted_job_is_retried_idempotently(
     job = db.scalar(select(ProcessingJob))
     assert job.status == JobStatus.SUCCEEDED and job.attempt_count == 2
     receipt = client.get(f"/v1/receipts/{init['receipt_id']}").json()
-    assert receipt["status"] == "CONFIRMED" and len(receipt["lines"]) == 4  # no duplicated lines
+    assert receipt["status"] == "REVIEW_REQUIRED" and len(receipt["lines"]) == 4  # no duplicated lines
 
 
 @pytest.mark.req("F-25")

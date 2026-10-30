@@ -195,7 +195,8 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
     with stage("decide"):
         thresholds = deps.thresholds_for(parsed.merchant)
         evaluation = evaluate(
-            view_from_parsed(parsed, out.merchant_hint_conflict, out.join_notes, out.qr_notes), thresholds
+            view_from_parsed(parsed, out.merchant_hint_conflict, out.join_notes, out.qr_notes, out.route),
+            thresholds,
         )
     out.parsed, out.evaluation = parsed, evaluation
     out.status = ReceiptStatus.REVIEW_REQUIRED if evaluation.reasons else ReceiptStatus.COMPLETED
@@ -318,8 +319,10 @@ def view_from_parsed(
     hint_conflict: bool,
     join_notes: list[JoinNote] | None = None,
     qr_notes: list[QrNote] | None = None,
+    route: ProcessingRoute | None = None,
 ) -> ReceiptView:
     return ReceiptView(
+        route=route,
         join_notes=list(join_notes or []),
         qr_notes=list(qr_notes or []),
         merchant=parsed.merchant,

@@ -5,7 +5,7 @@
   "total_cents": 1817,
   "subtotal_cents": 1654,
   "tax_cents": 163,
-  "status": "COMPLETED",
+  "status": "REVIEW_REQUIRED",
   "lines": [
     {
       "raw_description": "ARROZ CAROLINO PD 1KG",

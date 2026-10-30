@@ -239,6 +239,14 @@ Uma foto lida por OCR não se confirma sozinha enquanto a descrição não for c
    quantidade não o limpa. — F-38 ·
    `tests/unit/test_unit_alert.py::test_confirming_the_unit_clears_the_alert_and_other_edits_do_not`
 
+5. **Given** uma nota lida por OCR (foto, captura ou PDF digitalizado), mesmo com confiança alta e totais
+   conciliados, **When** é processada, **Then** vai para revisão com o motivo `photo_not_verified` e a pessoa
+   pode confirmá-la; um PDF de texto de cadeia calibrada continua a poder confirmar-se sozinho. **Regra
+   provisória, decidida em 2026-10-30: sai com a checagem de descrição (D1a).** — F-55 ·
+   `tests/unit/test_confidence.py::test_a_note_read_by_ocr_is_never_auto_confirmable`,
+   `tests/unit/test_confidence.py::test_a_note_not_read_by_ocr_keeps_its_automatic_confirmation`,
+   `tests/api/test_receipts.py::test_image_goes_through_local_ocr_and_waits_for_a_person`
+
 Âmbito: só o parser genérico (e os calibrados que o herdam: Aldi, Mercadona, Corte Inglês). Pingo Doce,
 Continente, Lidl e Auchan têm parser próprio e não alertam; estender o alerta a eles é decisão por tomar.
 A checagem de descrição (D1a) fica para depois do A2.2.

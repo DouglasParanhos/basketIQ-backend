@@ -274,7 +274,7 @@ def persist_outcome(
     db.flush()
 
     receipt.duplicate_of_receipt_id = find_attribute_duplicate(db, receipt)
-    evaluation = evaluate_receipt(db, settings, receipt)
+    evaluation = evaluate_receipt(db, settings, receipt, job)
     apply_evaluation(receipt, evaluation)
     receipt.version += 1
     metrics.RECEIPT_CONFIDENCE.observe(evaluation.overall_confidence)

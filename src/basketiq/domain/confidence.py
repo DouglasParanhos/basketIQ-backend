@@ -12,12 +12,19 @@ from decimal import Decimal
 from typing import Any
 
 from basketiq.domain.reconciliation import Reconciliation, reconcile
-from basketiq.domain.status import Merchant
+from basketiq.domain.status import Merchant, ProcessingRoute
 from basketiq.pipeline.schema import ReviewReason
 
 # Reasons that also prevent a *user* confirmation: values are missing, not merely uncertain.
 # An unknown store does not block: a purchase at a corner shop is a purchase like any other.
 BLOCKING_CODES = frozenset({"date_missing", "quantity_pending", "line_total_missing", "no_lines"})
+
+# Routes that read the note from an image. Provisional rule D1(a): until a description check exists, a note
+# read by OCR is never confirmed by itself, whatever its confidence and totals, because the totals do not
+# see a misread description. The rule goes away with D1(a), the description check (spec 009, assumptions).
+_READ_BY_OCR = frozenset(
+    {ProcessingRoute.LOCAL_OCR, ProcessingRoute.LOCAL_LLM, ProcessingRoute.EXTERNAL_FALLBACK}
+)
 
 
 @dataclass
@@ -57,6 +64,8 @@ class ReceiptView:
     join_notes: list[Any] = field(default_factory=list)
     # What the fiscal QR code said against what was read: {"code", "field", "message", "details"} each.
     qr_notes: list[Any] = field(default_factory=list)
+    # How the note was read; None when unknown (nothing has processed it yet).
+    route: ProcessingRoute | None = None
 
 
 @dataclass
@@ -245,6 +254,14 @@ def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
                     details=dict(qr_note["details"]),
                 )
             )
+
+    if view.route in _READ_BY_OCR:
+        reasons.append(
+            ReviewReason(
+                code="photo_not_verified",
+                message="Nota lida a partir de uma imagem: confirme as descrições e os valores.",
+            )
+        )
 
     if view.duplicate_suspected:
         reasons.append(

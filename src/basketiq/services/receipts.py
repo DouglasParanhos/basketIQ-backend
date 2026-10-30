@@ -21,6 +21,7 @@ from basketiq.domain.status import (
     JobStatus,
     LineReviewStatus,
     Merchant,
+    ProcessingRoute,
     ReceiptStatus,
     SourceType,
 )
@@ -75,9 +76,10 @@ def latest_job(db: Session, receipt_id: uuid.UUID) -> ProcessingJob | None:
 # ---------------------------------------------------------------- evaluation
 
 
-def view_of(receipt: Receipt) -> ReceiptView:
+def view_of(receipt: Receipt, route: ProcessingRoute | None = None) -> ReceiptView:
     edited = frozenset(receipt.manually_edited_fields or [])
     return ReceiptView(
+        route=route,
         merchant=receipt.merchant,
         purchase_at=receipt.purchase_at,
         total_cents=receipt.total_cents,
@@ -110,8 +112,13 @@ def view_of(receipt: Receipt) -> ReceiptView:
     )
 
 
-def evaluate_receipt(db: Session, settings: Settings, receipt: Receipt) -> Evaluation:
-    return evaluate(view_of(receipt), thresholds_for(db, settings, receipt.merchant))
+def evaluate_receipt(
+    db: Session, settings: Settings, receipt: Receipt, job: ProcessingJob | None = None
+) -> Evaluation:
+    """`job`: the latest job of the receipt, when the caller has it; it says how the note was read."""
+    job = job or latest_job(db, receipt.id)
+    route = ProcessingRoute(job.processing_route) if job and job.processing_route else None
+    return evaluate(view_of(receipt, route), thresholds_for(db, settings, receipt.merchant))
 
 
 def apply_evaluation(receipt: Receipt, evaluation: Evaluation) -> None:

@@ -378,9 +378,9 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
         ReceiptStatus.VALIDATING,
         ReceiptStatus.EXTRACTING,
     )
-    evaluation = svc.evaluate_receipt(db, settings, receipt) if has_content else None
-    rec = evaluation.reconciliation if evaluation else None
     job = svc.latest_job(db, receipt.id)
+    evaluation = svc.evaluate_receipt(db, settings, receipt, job) if has_content else None
+    rec = evaluation.reconciliation if evaluation else None
 
     error = None
     if status in ERROR_STATUSES:

@@ -73,7 +73,9 @@ def test_confident_local_ocr_resolves_without_llm_or_external() -> None:
         PipelineRequest(make_png(), "image/png"),
         deps(ocr=FakeOcr(PINGO_LINES, conf=0.97), resolver=resolver, external=external, budget=100),
     )
-    assert out.status == ReceiptStatus.COMPLETED
+    assert out.evaluation is not None
+    assert [r.code for r in out.evaluation.reasons] == ["photo_not_verified"]  # only the provisional D1 rule
+    assert out.status == ReceiptStatus.REVIEW_REQUIRED
     assert resolver.calls == [] and external.calls == 0
     assert out.route == ProcessingRoute.LOCAL_OCR
 
