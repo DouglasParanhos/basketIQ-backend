@@ -7,7 +7,7 @@ description: "Tarefas da spec 013: perfil, mercados e originais em bloco"
 
 **Input**: `/specs/013-perfil-utilizador/` — [spec.md](./spec.md), [plan.md](./plan.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/api.md](./contracts/api.md), [quickstart.md](./quickstart.md)
 
-**Tests**: pedidos (constituição VI). Cada teste leva `@pytest.mark.req("F-xx")`. Os identificadores **F-100 a F-112** estão fixados na tabela da `spec.md` (faixa da experiência v2, Funcional §12.4, sem alargar), partilhados com o frontend pela convenção «Verificado no Frontend»; o isolamento usa `PT-AC-9` e `SEC-authz`.
+**Tests**: pedidos (constituição VI). Cada teste leva `@pytest.mark.req("F-xx")`. Os identificadores **F-100 a F-112 e F-118** estão fixados na tabela da `spec.md` (faixa da experiência v2, Funcional §12.4, sem alargar), partilhados com o frontend pela convenção «Verificado no Frontend»; o isolamento usa `PT-AC-9` e `SEC-authz`.
 
 **Comandos**: contentores Docker, como em `quickstart.md` (o `make` não corre nesta máquina). Não há commits nesta lista; o `/simplify` corre antes de cada commit (T031).
 
@@ -56,6 +56,7 @@ description: "Tarefas da spec 013: perfil, mercados e originais em bloco"
 
 - [x] T011 [P] [US3] Em `tests/api/test_profile.py` (`F-104`): `onboarding_completed: true` preenche `onboarding_completed_at`; só isso não grava mais nenhum valor; repetir mantém a data original e os dados; `false` e `null` recusados; conta com compras e sem perfil lê-se com `onboarding_completed_at` nulo
 - [x] T012 [US3] Em `src/basketiq/services/profiles.py`, preencher `onboarding_completed_at` só quando está nulo
+- [x] T034 [US3] (acrescentada em 2026-10-31, decisão 17) Teste `F-118` em `tests/integration/test_migration_existing_accounts.py`, numa base descartável com dados sintéticos (escrito antes e visto falhar), e a migração de dados `alembic/versions/20261031_f6b9c4e2a3d8_existing_accounts_onboarding_done.py` (`down_revision = "e5a8b3d1f2c7"`, sem alterar a primeira): contas com `privacy_accepted_at` ficam com `onboarding_completed_at` preenchido e sem mais nenhum valor; perfil já concluído mantém data e dados; conta sem consentimento não ganha perfil; `downgrade` vazio
 
 ---
 
@@ -105,7 +106,7 @@ description: "Tarefas da spec 013: perfil, mercados e originais em bloco"
 - [x] T029 Confirmar que o golden sintético (`--baseline tests/golden/baseline.json`) não mudou (esta spec não toca no *parser*)
 - [x] T030 Atualizar o `README.md` do backend (secção de endpoints, se existir tabela) com perfil, mercados e originais em bloco
 - [x] T031 Correr `/simplify` e repetir T028; mostrar o `git diff --stat`
-- [ ] T032 (manual, Liz, **depois de rever**) Reconstruir a imagem, aplicar a migração `e5a8b3d1f2c7` à base de desenvolvimento com o serviço `migrate` e recriar os contentores; sem isto, a API nova falha contra a base antiga
+- [ ] T032 (manual, Liz, **depois de rever e só com o frontend 014 (Perfil) pronto**) Reconstruir a imagem, aplicar as duas migrações `e5a8b3d1f2c7` (tabela) e `f6b9c4e2a3d8` (contas existentes ficam concluídas) à base de desenvolvimento com o serviço `migrate` e recriar os contentores; sem isto, a API nova falha contra a base antiga. Não há forma provisória de definir a meta: as contas marcadas só a definem no Perfil
 - [ ] T033 (lançamento, Liz) Subir `PRIVACY_POLICY_VERSION` em `src/basketiq/services/accounts.py` e publicar o texto novo da política (redigido pela Liz) **antes** de ativar a recolha do perfil; quando subir, todas as contas ficam bloqueadas em compras e análises até consentirem de novo
 
 ---

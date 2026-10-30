@@ -34,7 +34,7 @@ Contrato primeiro: depois de implementar regenera-se `openapi.json` para o front
 
 **Constraints**: dinheiro em cêntimos inteiros (II); nenhum campo do perfil em logs nem na auditoria (IV); chaves de configuração obrigatórias e sem *default* no código (spec 008); `PATCH` não grava valores por omissão (III)
 
-**Scale/Scope**: 1 tabela, 1 migração, 5 endpoints novos (2 de perfil, 1 de mercados, 2 de originais), 1 campo novo em 2 respostas de configuração, ~13 identificadores de teste
+**Scale/Scope**: 1 tabela, 2 migrações (esquema e dados), 5 endpoints novos (2 de perfil, 1 de mercados, 2 de originais), 1 campo novo em 2 respostas de configuração, ~13 identificadores de teste
 
 ## Constitution Check
 
@@ -71,6 +71,7 @@ specs/013-perfil-utilizador/
 
 ```text
 alembic/versions/20261031_e5a8b3d1f2c7_user_profiles.py     # NOVO
+alembic/versions/20261031_f6b9c4e2a3d8_existing_accounts_onboarding_done.py   # NOVO (dados)
 src/basketiq/
 ├── app_config.py                      # + smart_list_enabled (SMART_LIST_ENABLED)
 ├── db/models.py                       # + UserProfile

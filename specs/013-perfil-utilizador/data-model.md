@@ -2,7 +2,7 @@
 
 ## user_profiles (nova)
 
-Uma linha por utilizador, criada no primeiro `PATCH`; sem linha, o perfil lê-se como vazio. Apagada com o utilizador (`ON DELETE CASCADE`).
+Uma linha por utilizador, criada no primeiro `PATCH` (ou pela migração de dados, nas contas anteriores ao onboarding); sem linha, o perfil lê-se como vazio. Apagada com o utilizador (`ON DELETE CASCADE`).
 
 | Coluna | Tipo | Nulo | Regra |
 |---|---|---|---|
@@ -26,6 +26,7 @@ Uma linha por utilizador, criada no primeiro `PATCH`; sem linha, o perfil lê-se
 
 - Perfil inexistente → criado vazio no primeiro `PATCH` (ou lido como vazio sem criar linha no `GET`).
 - `onboarding_completed_at`: `null` → data (primeira vez que chega `onboarding_completed: true`) → imutável.
+- Contas anteriores ao onboarding: a migração de dados `f6b9c4e2a3d8` cria o perfil vazio (só `user_id` e `onboarding_completed_at`; pessoas e meta nulos, mercados e objetivos `[]`) das contas com `privacy_accepted_at` preenchido, e preenche a data nos perfis por concluir. Contas sem consentimento ficam sem linha.
 - Eliminar a conta → a linha desaparece por cascata; nada fica na auditoria (a auditoria não leva valores do perfil).
 
 ## Entidades existentes tocadas (sem alterar o esquema)

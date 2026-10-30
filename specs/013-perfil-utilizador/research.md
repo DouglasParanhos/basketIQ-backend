@@ -46,8 +46,11 @@ Verificado a 2026-10-30 no código do backend. Cada ponto resolve uma dúvida do
 **R9. Criar o perfil sem corridas.**
 - Decisão: `INSERT … ON CONFLICT DO NOTHING` seguido de `SELECT … FOR UPDATE` do perfil; o `PATCH` aplica-se sobre a linha bloqueada. Dois `PATCH` simultâneos do mesmo utilizador não criam duas linhas nem perdem campos.
 
-**R10. Migração.**
-- Decisão: `alembic/versions/20261031_e5a8b3d1f2c7_user_profiles.py`, `down_revision = "d4f7a2c8e1b6"` (a revisão atual), `upgrade` cria a tabela e os `CHECK`, `downgrade` apaga-a. O CI já corre upgrade, downgrade total e upgrade. Aplicar à base de desenvolvimento é um passo manual da Liz.
+**R10. Migrações (duas).**
+- Decisão: `alembic/versions/20261031_e5a8b3d1f2c7_user_profiles.py`, `down_revision = "d4f7a2c8e1b6"` (a revisão anterior), `upgrade` cria a tabela e os `CHECK`, `downgrade` apaga-a. O CI já corre upgrade, downgrade total e upgrade.
+- Migração de dados (decisão 17 do plano; Liz, 2026-10-31): `20261031_f6b9c4e2a3d8_existing_accounts_onboarding_done.py`, `down_revision = "e5a8b3d1f2c7"`, sem alterar a primeira. Um só `INSERT … SELECT … ON CONFLICT DO UPDATE` cria o perfil vazio das contas com `privacy_accepted_at` preenchido e preenche `onboarding_completed_at` (com `now()`) nos perfis que o têm nulo; nunca altera um perfil já concluído nem grava outro valor. Contas sem `privacy_accepted_at` ficam sem perfil: não chegaram à aplicação e fazem o onboarding como contas novas.
+- `downgrade` da segunda é vazio: uma linha criada pela migração não se distingue de uma concluída pela pessoa, e o `downgrade` da primeira apaga a tabela. O teste `F-118` (`tests/integration/test_migration_existing_accounts.py`) usa uma base descartável e dados sintéticos.
+- Aplicar à base de desenvolvimento é um passo manual da Liz (T032), **só quando o frontend 014 (Perfil) estiver pronto**: quem é marcado sem meta só a define no Perfil e não há forma provisória de a definir.
 
 **R11. Auditoria e logs.**
 - Decisão (confirmada pela Liz): sem evento de auditoria para alterações do perfil; logs e erros nunca incluem pessoas, mercados nem meta (teste com o *middleware* de redação existente).

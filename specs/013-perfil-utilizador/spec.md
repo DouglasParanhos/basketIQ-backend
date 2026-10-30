@@ -19,7 +19,7 @@ Decisões da Liz (itens 4, 7, 10 e 11 da lista de 2026-10-30) e respostas recome
 - Q: O perfil guarda-se com `PUT` ou `PATCH`? → A: **`PATCH`, campo omitido = manter; `null` explícito = apagar** (decisão da Liz).
 - Q: Que valores têm os objetivos? → A: `finances`, `shopping_list` e `savings`. «Todas as anteriores» não se guarda: é a escolha dos três.
 - Q: Como se marca o onboarding como concluído? → A: campo `onboarding_completed: true` no `PATCH`; a data só se preenche na primeira vez e mantém-se.
-- Q: Quem já usa a aplicação vê o onboarding? → A: sim, uma vez, e pode saltá-lo.
+- Q: Quem já usa a aplicação vê o onboarding? → A: **não** (decisão 17 do plano, Liz, 2026-10-30; substitui «sim, uma vez»). Uma migração de dados marca como concluídas as contas que já aceitaram a política (`privacy_accepted_at` preenchido), sem gravar nenhum valor de perfil; essas pessoas definem a meta e as preferências no Perfil das Definições (frontend 014). Quem nunca aceitou a política não chegou à aplicação e faz o onboarding como conta nova.
 - Q: Que mercados devolve a lista pública? → A: os 7 com parser próprio (sem o estado «desconhecido»). Intermarché, Coviran e E.Leclerc saem do onboarding até terem parser.
 - Q: Código e estado quando falta o consentimento da política atual? → A: 403 com o código `privacy_consent_required`.
 - Q: De quem é o critério «apagar tudo o que deriva das compras» (RF-12)? → A: da **spec 010 (passo C)**. Esta spec só garante que o perfil desaparece com a conta; o teste F-23 de ponta a ponta cobre as duas.
@@ -50,7 +50,8 @@ Faixa da experiência v2 (Funcional §12.4). O mesmo F-xx identifica o cenário 
 | F-101 | Guardar e ler o perfil; repetir é idempotente | US1.2, US1.3 |
 | F-102 | `PATCH`: omitido mantém, `null` apaga, `{}` não altera | US1.4 a US1.6 |
 | F-103 | Validação dos valores; `null` nas listas recusado; nada gravado se inválido | US2.1 a US2.7 |
-| F-104 | Conclusão do onboarding, só uma vez | US3 |
+| F-104 | Conclusão do onboarding, só uma vez | US3.1 a US3.3, US3.5 |
+| F-118 | Migração de dados: contas que já aceitaram a política ficam concluídas, sem valores | US3.4 |
 | F-105 | Lista de mercados suportados | US4 |
 | F-106 | Consentimento da versão atual em todos os endpoints | US5 |
 | F-107 | Eliminar a conta apaga o perfil | US6.1, US6.2 |
@@ -108,7 +109,7 @@ Concluir ou saltar o onboarding fica registado para o utilizador não voltar a s
 1. **Given** um perfil sem conclusão, **When** o `PATCH` traz `onboarding_completed: true`, **Then** `onboarding_completed_at` fica preenchido e é devolvido. — RF-14
 2. **Given** um utilizador que saltou todos os passos, **When** o `PATCH` traz só `onboarding_completed: true`, **Then** a conclusão fica registada e nenhum valor de perfil é gravado. — RF-14, constituição III
 3. **Given** um onboarding já concluído, **When** o utilizador refaz o percurso e o `PATCH` traz de novo `onboarding_completed: true`, **Then** a data original mantém-se e os dados guardados não se perdem. — RF-14
-4. **Given** uma conta existente com compras e sem perfil, **When** pede o perfil, **Then** `onboarding_completed_at` é nulo e o frontend mostra o onboarding uma vez. — RF-14
+4. **Given** uma conta anterior ao onboarding que já aceitou a política, **When** a migração de dados corre e a conta pede o perfil, **Then** `onboarding_completed_at` está preenchido, pessoas e meta são nulos e mercados e objetivos vazios (nada é inventado) e o frontend não mostra o onboarding. Um perfil já concluído mantém a data e os dados; um por concluir fica concluído; uma conta que nunca aceitou a política não ganha perfil. — RF-14, constituição III
 5. **Given** `onboarding_completed: false`, **When** é enviado, **Then** é recusado (a conclusão não se desfaz). — RF-14
 
 ---
@@ -195,5 +196,6 @@ O frontend decide mostrar o destino **Lista** a partir da configuração públic
 ## Assumptions
 
 - Dependência: a migração de `user_profiles` e a regeneração do `openapi.json` seguem o fluxo «contrato primeiro» do plano.
+- **Duas migrações:** `e5a8b3d1f2c7` cria a tabela e `f6b9c4e2a3d8` (dados) marca as contas existentes como concluídas. Aplicam-se juntas, só quando o frontend 014 (Perfil) estiver pronto: quem fica marcado sem meta só a define no Perfil e não há forma provisória de a definir (decisão da Liz, 2026-10-31).
 - **Lançamento (fora desta spec):** subir `PRIVACY_POLICY_VERSION` e publicar o texto novo da política, redigido pela Liz, antes de ativar a recolha do perfil (tarefa T033). Até lá a versão atual é a aceite por todos e o cenário US5 só se exercita nos testes.
 - A spec 010 está reservada ao passo C (grupos de produto). Ao criar essa spec com o `create-new-feature.sh`, usar `--number 10`; sem isso o spec-kit atribui o número seguinte ao maior existente.
