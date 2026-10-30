@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-30
 
-**Status**: Draft (Fase 0 do plano UX v2: só histórias e critérios de aceitação; sem requisitos técnicos, plano nem tarefas). Clarificada em 2026-10-30.
+**Status**: Draft (Fase 0 do plano UX v2). Clarificada em 2026-10-30; decisões da análise (Q1 a Q5, H2, M1) aplicadas em 2026-10-30. Plano e tarefas em `plan.md` e `tasks.md`.
 
 **Input**: Especificação Funcional v1.4 RF-13, RF-14, RF-12; `Documentation/Super Mercado_—_Plano_de_Implementação_UX_v2.md` (Fases 2 e 6, lacunas de backend 1, 6 e 7). Frontend: `../basketIQ-frontend/specs/010-onboarding`, `014-definicoes-v2`.
 
@@ -27,6 +27,38 @@ Decisões da Liz (itens 4, 7, 10 e 11 da lista de 2026-10-30) e respostas recome
 - Q: Apagar todos inclui compras ainda por confirmar? → A: não; só os originais de compras confirmadas, para não impedir o reprocessamento (`original_deleted`).
 - Q: Como se expõe a opção da lista? → A: `GET /v1/config` devolve `smart_list_enabled` (chave `SMART_LIST_ENABLED`, obrigatória, desligada por omissão). Enquanto este campo não existir, o frontend trata-o como desligado.
 - Q: Nome e caminho dos originais em bloco? → A: `GET /v1/receipts/stored-files` (quantos ficheiros) e `DELETE /v1/receipts/stored-files` (apagar todos), declarados **antes** de `/{receipt_id}` e com nome distinto de `/{id}/original` (decisão da Liz).
+
+### Session 2026-10-30 (decisões da Liz sobre a análise)
+
+- Q: Onde se exige a versão atual da política? → A: em **todos os endpoints que exigem consentimento**, alterando só `consented_user`. Uma conta com consentimento mas sem versão registada conta como desatualizada e pede novo consentimento (verificado: a base de desenvolvimento tem 2 contas, nenhuma nessa situação, e só `accept_privacy` grava estes campos, sempre os dois). `GET /v1/me`, `POST /v1/me/privacy-consent`, `DELETE /v1/me` e `GET /v1/me/profile` só exigem sessão.
+- Q: Quem sobe `PRIVACY_POLICY_VERSION`? → A: **esta spec não o faz.** É tarefa de lançamento (T033), junto com o texto novo da política, que a Liz redige. O cenário US5 testa-se alterando a versão no próprio teste.
+- Q: Quantos originais por chamada ao apagar em bloco? → A: no máximo **500 compras** por chamada; a resposta traz `remaining` e o cliente repete até 0.
+- Q: Como se partilham os identificadores F-xx com o frontend? → A: pela convenção «Verificado no Frontend»: o mesmo F-xx identifica o mesmo cenário nos dois repositórios (tabela abaixo); a faixa da experiência v2 (Funcional §12.4) não se alarga.
+- Q: `merchants: null` e `goals: null`? → A: 422; `[]` limpa a lista.
+- Q: Auditar alterações do perfil? → A: não; só o consentimento se audita.
+- Q: O operador vê a opção da lista? → A: sim, como as outras chaves do ficheiro (critério US8.4).
+- Q: De onde vêm os nomes dos mercados? → A: **só desta API**. A lista local do frontend (`merchantName` e as listas do protótipo) deixa de existir (anotado na spec 010 do frontend).
+- Q: `GET /v1/me/profile` exige consentimento da versão atual? → A: não, só sessão (ler os próprios dados).
+
+## Identificadores de teste (constituição VI)
+
+Faixa da experiência v2 (Funcional §12.4). O mesmo F-xx identifica o cenário no backend (`@pytest.mark.req("F-1xx")`) e no frontend (nome do teste `F-1xx: …`, nas specs 010 e 014, que passam a citá-los com «Verificado no Frontend»). O isolamento usa os ids que já existem (`PT-AC-9`, `SEC-authz`).
+
+| ID | O que verifica | Critérios |
+|---|---|---|
+| F-100 | Perfil vazio numa conta nova | US1.1 |
+| F-101 | Guardar e ler o perfil; repetir é idempotente | US1.2, US1.3 |
+| F-102 | `PATCH`: omitido mantém, `null` apaga, `{}` não altera | US1.4 a US1.6 |
+| F-103 | Validação dos valores; `null` nas listas recusado; nada gravado se inválido | US2.1 a US2.7 |
+| F-104 | Conclusão do onboarding, só uma vez | US3 |
+| F-105 | Lista de mercados suportados | US4 |
+| F-106 | Consentimento da versão atual em todos os endpoints | US5 |
+| F-107 | Eliminar a conta apaga o perfil | US6.1, US6.2 |
+| F-108 | Resumo dos ficheiros guardados | US7.1, US7.4 |
+| F-109 | Apagar em bloco: dados mantidos, idempotente, limite de 500 e `remaining` | US7.2, US7.3, US7.5, US7.7 |
+| F-110 | As rotas `stored-files` não são tomadas por `/{receipt_id}` | US7.6 |
+| F-111 | Opção da lista na configuração pública e na do operador | US8.1, US8.2, US8.4 |
+| F-112 | Configuração sem a chave ou inválida recusa arrancar | US8.3 |
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -63,6 +95,7 @@ Valores fora dos limites são recusados com mensagem acionável; nunca se grava 
 4. **Given** um mercado fora da lista suportada, **When** guarda, **Then** é recusado; um mercado repetido conta uma vez. — RF-13
 5. **Given** um objetivo fora de `finances`, `shopping_list` e `savings`, **When** guarda, **Then** é recusado. — RF-13
 6. **Given** um pedido inválido, **When** é recusado, **Then** a mensagem diz o limite e nada fica guardado, nem os campos válidos do mesmo pedido. — RF-13
+7. **Given** `merchants: null` ou `goals: null`, **When** guarda, **Then** é recusado (422); com `[]` a lista fica vazia. — RF-13
 
 ---
 
@@ -93,16 +126,18 @@ O utilizador autenticado obtém a lista de mercados suportados para o onboarding
 
 ---
 
-### User Story 5 - Nova versão da política e novo consentimento (Priority: P1)
+### User Story 5 - Consentimento da versão atual da política (Priority: P1)
 
-Os dados novos (pessoas, mercados, objetivos, meta) só se recolhem depois de aceite a nova versão da política.
+Os dados novos (pessoas, mercados, objetivos, meta) só se recolhem depois de aceite a versão atual da política. A regra vale para **todos** os endpoints que exigem consentimento, não só para o perfil.
 
 **Acceptance Scenarios**:
 
-1. **Given** a versão da política incrementada, **When** `GET /v1/me` é chamado por quem aceitou a anterior, **Then** a versão atual e a aceite diferem e o consentimento fica pendente. — RF-13, RF-12
-2. **Given** consentimento pendente, **When** guarda o perfil, **Then** recebe 403 com o código `privacy_consent_required` e nada é gravado. — RF-13, RF-12
-3. **Given** o consentimento da versão atual dado, **When** guarda o perfil, **Then** é aceite. — RF-13
-4. **Given** o consentimento, **When** é dado, **Then** fica auditado sem dados pessoais. — RF-12, constituição IV
+1. **Given** a versão da política alterada (no teste), **When** `GET /v1/me` é chamado por quem aceitou a anterior, **Then** a versão atual e a aceite diferem e o consentimento fica pendente. — RF-13, RF-12
+2. **Given** consentimento pendente (versão aceite diferente da atual), **When** chama o `PATCH` do perfil, uma rota de compras ou uma de análises, **Then** recebe 403 com o código `privacy_consent_required` e nada é gravado. — RF-13, RF-12
+3. **Given** consentimento pendente, **When** chama `GET /v1/me`, `POST /v1/me/privacy-consent`, `DELETE /v1/me` ou `GET /v1/me/profile`, **Then** continuam acessíveis: a pessoa tem de poder consentir, sair e apagar a conta. — RF-12
+4. **Given** o consentimento da versão atual dado, **When** guarda o perfil ou usa as compras, **Then** é aceite. — RF-13
+5. **Given** uma conta com consentimento registado mas sem versão, **When** chama um endpoint que exige consentimento, **Then** conta como pendente (403) até consentir de novo. — RF-12
+6. **Given** o consentimento, **When** é dado, **Then** fica auditado sem dados pessoais. — RF-12, constituição IV
 
 ---
 
@@ -128,6 +163,7 @@ Os dados novos (pessoas, mercados, objetivos, meta) só se recolhem depois de ac
 4. **Given** compras ainda por confirmar, **When** apaga todos, **Then** os originais dessas compras não são tocados nem contados. — RF-12
 5. **Given** o utilizador B, **When** apaga todos, **Then** só os seus originais são afetados. — RF-12, PT-AC-9
 6. **Given** os caminhos `.../stored-files`, **When** são chamados, **Then** não são interpretados como identificador de compra (declarados antes de `/{receipt_id}`) e não se confundem com `/{id}/original`. — RF-12
+7. **Given** mais de 500 compras confirmadas com original guardado, **When** pede para os apagar, **Then** remove os originais de no máximo 500 compras, a resposta traz `files_deleted`, `receipts` e `remaining` (as compras que faltam) e repetir o pedido até `remaining` = 0 apaga o resto. — RF-12
 
 ---
 
@@ -140,6 +176,7 @@ O frontend decide mostrar o destino **Lista** a partir da configuração públic
 1. **Given** a opção da lista desligada (omissão), **When** o cliente lê a configuração pública, **Then** recebe `smart_list_enabled` falso. — RF-16
 2. **Given** a opção ligada, **When** o cliente lê a configuração, **Then** recebe verdadeiro, sem expor outras chaves internas. — RF-16
 3. **Given** o ficheiro de configuração sem `SMART_LIST_ENABLED` ou com valor inválido, **When** a aplicação arranca, **Then** recusa arrancar com uma mensagem clara (padrão das 2 chaves atuais, sem *default* no código). — RF-16
+4. **Given** o operador, **When** abre a configuração do produto (`GET /v1/admin/config`), **Then** vê `smart_list_enabled` como as outras chaves do ficheiro. — RF-16, CFG-02
 
 ### Edge Cases
 
@@ -158,4 +195,5 @@ O frontend decide mostrar o destino **Lista** a partir da configuração públic
 ## Assumptions
 
 - Dependência: a migração de `user_profiles` e a regeneração do `openapi.json` seguem o fluxo «contrato primeiro» do plano.
+- **Lançamento (fora desta spec):** subir `PRIVACY_POLICY_VERSION` e publicar o texto novo da política, redigido pela Liz, antes de ativar a recolha do perfil (tarefa T033). Até lá a versão atual é a aceite por todos e o cenário US5 só se exercita nos testes.
 - A spec 010 está reservada ao passo C (grupos de produto). Ao criar essa spec com o `create-new-feature.sh`, usar `--number 10`; sem isso o spec-kit atribui o número seguinte ao maior existente.
