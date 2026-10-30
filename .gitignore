@@ -13,6 +13,14 @@ build/
 *.egg-info/
 reports/
 # Real receipts contain personal data (NIF, card digits): never commit them.
-Receipts/
+/Receipts/
 *.expected.json
 !tests/**/expected.json
+
+# Local-only material that must never reach the repository
+/patches/
+/Documentation/
+*.dump
+*.sql
+.env.*
+!.env.example
