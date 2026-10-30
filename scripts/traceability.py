@@ -22,10 +22,14 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ID = re.compile(r"\b(F-\d{2}[a-z]?|RF-\d{2}|RF-admin|SEC-[a-z]+|PT-AC-\d+|PT-\d+)\b")
+ID = re.compile(r"\b(F-\d{2,}[a-z]?|RF-\d{2}|RF-admin|SEC-[a-z]+|PT-AC-\d+|PT-\d+)\b")
 DELEGATION = re.compile(r"\*\*Verificado no Frontend\*\*:\s*(.+)")
 
 PLAN_IDS = [f"F-{n:02d}" for n in range(1, 56)] + ["F-03a", "F-15a", "F-15b", "F-22a", "F-22b"]
+
+# Highest F-xx id of any band (end of step D, Funcional §12.4); ids above it are reported as problems.
+# PLAN_IDS stays narrower on purpose: a band's ids join it once their scenarios are in the test plan.
+F_MAX = 175
 
 
 def _req_ids(decorator: ast.expr) -> list[str]:
@@ -79,7 +83,8 @@ def build(root: Path) -> tuple[str, list[str]]:
     tests = collect_tests(root)
     cited, delegated = collect_specs(root)
     lines = ["# Matriz de rastreabilidade (Backend)", "", "| Requisito | Specs | Testes |", "|---|---|---|"]
-    for req in sorted(set(tests) | set(cited) | set(PLAN_IDS), key=sort_key):
+    ids = sorted(set(tests) | set(cited) | set(PLAN_IDS), key=sort_key)
+    for req in ids:
         test_cell = "<br>".join(f"`{t}`" for t in tests.get(req, []))
         if not test_cell and req in delegated:
             test_cell = "_Frontend_"
@@ -89,6 +94,11 @@ def build(root: Path) -> tuple[str, list[str]]:
     for req in PLAN_IDS:
         if req not in tests and req not in delegated:
             problems.append(f"{req}: no backend test and no Frontend delegation in specs")
+    problems += [
+        f"{req}: outside the F-xx bands (max F-{F_MAX})"
+        for req in ids
+        if (key := sort_key(req))[0] == "F" and key[1] > F_MAX
+    ]
     untested = sorted((set(cited) - set(tests)) - delegated, key=sort_key)
     lines += ["", "## Ids citados nas specs sem teste no backend", ""]
     lines += [f"- {req} ({', '.join(cited[req])})" for req in untested] or ["- nenhum"]
