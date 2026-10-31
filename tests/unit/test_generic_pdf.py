@@ -64,6 +64,9 @@ def test_gross_and_net_both_fit_the_lines_and_what_was_paid_decides() -> None:
     # The same lines, but the customer paid the gross amount: the payments, not a fixed preference, decide.
     gross = parse([*GROSS_PRINTED, "TOTAL PAGO 20,62", "Multibanco 20,62"])
     assert gross.total_cents == 2062
+    # Part paid with a bottle-return voucher: it is still paid, so it counts towards what decides.
+    voucher = parse([*GROSS_PRINTED, "TOTAL PAGO 13,65", "V. Deposito Volta 0,80", "Multibanco 12,85"])
+    assert voucher.total_cents == 1365
 
 
 @pytest.mark.req("F-34")

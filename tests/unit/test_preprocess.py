@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import io
 import math
 from itertools import pairwise
 
 import pytest
 from PIL import Image, ImageDraw
+from reportlab.lib.pagesizes import mm
+from reportlab.pdfgen import canvas
 
 from basketiq.pipeline import orchestrator, preprocess
+from basketiq.pipeline.pdf_text import extract_pdf_text
 from basketiq.pipeline.preprocess import OcrTile, crop_to_paper, flatten_paper, ocr_tiles, tile_spans
 from basketiq.pipeline.schema import TextToken
 from tests.helpers import StubOcr
@@ -87,3 +91,26 @@ def test_overlapping_slices_give_every_text_once_at_its_place_on_the_page(
     tokens = orchestrator._recognize_page(_RowsOcr([0, 400]), blank, page=0)
     assert [t.text for t in sorted(tokens, key=lambda t: t.y0)] == [f"row{y}" for y in range(50, 1000, 100)]
     assert all(t.y0 == int(t.text[3:]) - 10 for t in tokens)
+
+
+@pytest.mark.req("RF-05")
+def test_transparent_screenshot_background_is_white_not_black() -> None:
+    shot = Image.new("RGBA", (40, 40), (0, 0, 0, 0))  # transparent around the receipt
+    ImageDraw.Draw(shot).rectangle((10, 10, 29, 29), fill=(20, 20, 20, 255))
+    buf = io.BytesIO()
+    shot.save(buf, format="PNG")
+    image = preprocess.load_image(buf.getvalue())
+    assert image.mode == "RGB"
+    assert image.getpixel((0, 0)) == (255, 255, 255)
+    assert image.getpixel((20, 20)) == (20, 20, 20)
+
+
+@pytest.mark.req("F-26")
+def test_bold_text_drawn_twice_is_read_once() -> None:
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(80 * mm, 40 * mm))
+    c.setFont("Courier", 8)
+    for _ in range(2):  # how a Lidl e-invoice prints bold: the same characters at the same place
+        c.drawString(5 * mm, 20 * mm, "0,464 kg x 6,19 EUR/kg")
+    c.save()
+    assert [line.text for line in extract_pdf_text(buf.getvalue()).lines] == ["0,464 kg x 6,19 EUR/kg"]

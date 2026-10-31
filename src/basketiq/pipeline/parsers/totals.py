@@ -33,18 +33,19 @@ _METHODS = (
     r"Numer[aá]rio|Dinheiro|Cheque|Pagamento\s+com\s+cart\w*"
 )
 _BALANCES = (
-    r"Desconto\s+Cart[aã]o\s+Utilizado|Vale|Valor\s+dep[oó]sito|Cr[eé]dito\s+dep[oó]sito|"
-    r"Saldo\s+(?:utilizado|cart[aã]o)"
+    r"Desconto\s+Cart[aã]o\s+Utilizado|Vale|Valor\s+dep[oó]sito|Cr[eé]dito\s+dep[oó]sito|V\.\s*Dep[oó]sito|"
+    r"Saldo\s+(?:utilizado|cart[aã]o|Pingo\s+Doce)"
 )
 
 
 def _paid_with(words: str) -> re.Pattern[str]:
-    return re.compile(rf"^(?:{words})\b.*?\s(?P<amount>{MONEY}){_EURO}$", re.I)
+    return re.compile(rf"^(?:{words})\b.*?\s\(?\s*(?P<amount>{MONEY})\s*\)?{_EURO}$", re.I)
 
 
 _PAYMENT = _paid_with(f"{_METHODS}|{_BALANCES}")
-_BALANCE = _paid_with(_BALANCES)
-_SUMMARY_START = re.compile(r"^(?:SUBTOTAL|TOTAL|A\s+PAGAR)\b", re.I)
+BALANCE = _paid_with(_BALANCES)
+# Pingo Doce prints the card balance spent under "Descontos Extra", before its TOTAL.
+_SUMMARY_START = re.compile(r"^(?:SUBTOTAL|TOTAL|A\s+PAGAR|Descontos\s+Extra)\b", re.I)
 _VAT_TABLE = re.compile(r"^(?:Resumo\s+IVA|%IVA|IVA\b|TAXA\b)", re.I)
 
 
@@ -81,7 +82,7 @@ def balance_used(lines: list[TextLine]) -> int:
     for text in texts[start:]:
         if _VAT_TABLE.match(text):
             break
-        if (m := _BALANCE.match(text)) and (cents := parse_money_cents(m.group("amount"))) is not None:
+        if (m := BALANCE.match(text)) and (cents := parse_money_cents(m.group("amount"))) is not None:
             total += cents
     return total
 

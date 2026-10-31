@@ -20,7 +20,8 @@ def extract_pdf_text(data: bytes) -> DocumentText:
     with pdfplumber.open(io.BytesIO(data)) as pdf:
         page_count = len(pdf.pages)
         for page_index, page in enumerate(pdf.pages):
-            for word in page.extract_words(keep_blank_chars=False, use_text_flow=False):
+            # Bold text drawn twice at the same spot would read "EEUURR/kg" (Lidl e-invoices).
+            for word in page.dedupe_chars().extract_words(keep_blank_chars=False, use_text_flow=False):
                 tokens.append(
                     TextToken(
                         text=word["text"],

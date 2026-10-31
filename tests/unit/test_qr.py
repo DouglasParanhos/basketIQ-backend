@@ -390,3 +390,11 @@ def test_a_receipt_without_a_qr_goes_through_exactly_as_before() -> None:
         without = run_pipeline(request, _deps(qr_reader=lambda *_: None))
         assert with_reader.qr is None and with_reader.qr_notes == [], case.name
         assert _comparable(with_reader) == _comparable(without), case.name
+
+
+@pytest.mark.req("F-42")
+def test_a_pingo_doce_card_balance_printed_before_the_total_explains_the_difference() -> None:
+    pingo = ["Descontos Extra", "Saldo Pingo Doce (11,40)", "Resumo", "TOTAL 14,43", "TOTAL A PAGAR 2,63"]
+    (note,) = check(parsed_receipt(1403), pingo, total="9.99")
+    assert note["details"]["balance_cents"] == 1140
+    assert check(parsed_receipt(1403), pingo, total="2.63") == []

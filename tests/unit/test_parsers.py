@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from basketiq.domain.status import Merchant
+from basketiq.domain.status import Merchant, ProcessingRoute
 from basketiq.pipeline.classify import classify
 from basketiq.pipeline.parsers import parser_for
 from basketiq.pipeline.parsers.base import (
@@ -326,3 +326,67 @@ def test_hint_used_when_document_has_no_signals() -> None:
 def test_hint_conflict_is_flagged() -> None:
     result = classify(doc_from_lines(["Pingo Doce", "500829993"]), hint=Merchant.LIDL)
     assert result.merchant == Merchant.PINGO_DOCE and result.hint_conflict
+
+
+@pytest.mark.req("RF-06")
+def test_lidl_percent_discount_applies_to_the_previous_item() -> None:
+    lines = [
+        "LIDL & Cia",
+        "EUR",
+        "DORITOS TEX MEX 3,39 A",
+        "DESCONTO 20% -0,68",
+        "------------",
+        "Total 2,71",
+    ]
+    parsed = parser_for(Merchant.LIDL).parse(doc_from_lines(lines))
+    assert [(line.raw_description, line.discount_cents) for line in parsed.lines] == [("DORITOS TEX MEX", 68)]
+
+
+@pytest.mark.req("RF-06")
+def test_pingo_doce_card_balance_is_a_way_of_paying_not_a_discount() -> None:
+    lines = [
+        "Artigos",
+        " E LINHA PD 500 G 1,79",
+        " C CROISSANT C SEMENTES 2 X 0,89 1,78",
+        "Poupança Imediata (0,40)",
+        "Descontos Extra",
+        "Saldo Pingo Doce (2,00)",
+        "Resumo",
+        "TOTAL 3,57",
+        "TOTAL POUPANÇA (2,40)",
+        "TOTAL A PAGAR 1,17",
+        "Resumo IVA",
+        "C 6% 1,04 0,06 1,10",
+    ]
+    parsed = parser_for(Merchant.PINGO_DOCE).parse(doc_from_lines(lines))
+    assert [line.raw_description for line in parsed.lines] == ["LINHA PD 500 G", "CROISSANT C SEMENTES"]
+    assert parsed.total_cents == 317  # what the purchase was worth: 3,57 less the 0,40 saving
+    assert parsed.total_discount_cents == 40
+    assert parsed.subtotal_cents is None and parsed.tax_cents is None  # the VAT table covers 1,17 only
+    assert parsed.notes == []
+
+
+ALDI_LOST_COMMA = [
+    "DENOMINAÇÃO PREÇO IVA",
+    "CENOURA 2KG 1,99 € 1",
+    "BATATA BRANCA 2,5KG 229 E",
+    "SORTIDO DE PÃO, 500 G",
+    "ESPINAFRES, 100G 0,69 € 1",
+]
+
+
+@pytest.mark.req("RF-06")
+@pytest.mark.parametrize(("total", "recovered"), [("4,97", True), ("5,00", False), ("2,68", False)])
+def test_ocr_price_that_lost_its_comma_is_taken_only_when_it_closes_the_total(
+    total: str, recovered: bool
+) -> None:
+    doc = doc_from_lines([*ALDI_LOST_COMMA, f"A PAGAR {total} €"], route=ProcessingRoute.LOCAL_OCR)
+    parsed = parser_for(Merchant.ALDI).parse(doc)
+    names = [line.raw_description for line in parsed.lines]
+    assert ("BATATA BRANCA 2,5KG" in names) is recovered
+    assert "SORTIDO DE PÃO," not in names  # "500 G" is never a price: it does not close any of these totals
+    if recovered:
+        potato = parsed.lines[names.index("BATATA BRANCA 2,5KG")]
+        assert names.index("BATATA BRANCA 2,5KG") == 1  # in its place on the receipt
+        assert potato.line_total_cents == 229
+        assert potato.field_confidence["line_total"] < 0.8  # reviewed

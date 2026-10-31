@@ -46,7 +46,7 @@ _QTY = re.compile(
     rf"(?:\s+(?P<total>{MONEY})\s+(?P<tax>[A-E]))?$"
 )
 _DISCOUNT = re.compile(
-    rf"^(?:Desconto|Poupan|Promo|Lidl\s*Plus)[^\d]*?-\s*(?P<amount>{MONEY})(?:\s+[A-E])?$",
+    rf"^(?:Desconto|Poupan|Promo|Lidl\s*Plus).*?-\s*(?P<amount>{MONEY})(?:\s+[A-E])?$",
     re.I,
 )
 _TOTAL = re.compile(rf"^Total\s+(?P<amount>{MONEY})$", re.I)

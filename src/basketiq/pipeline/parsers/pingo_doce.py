@@ -31,6 +31,7 @@ from basketiq.pipeline.parsers.base import (
     parse_tax_table,
     unresolved_line,
 )
+from basketiq.pipeline.parsers.totals import BALANCE
 from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt
 
 _ITEM_BODY = (
@@ -61,8 +62,15 @@ class PingoDoceParser:
 
         item_shape = _PHOTO_ITEM if doc.route == ProcessingRoute.LOCAL_OCR else _ITEM
         parsed_lines: list[ParsedLine] = []
+        balance = 0
         for line in item_zone:
             text = line.text.strip()
+            # "Descontos Extra / Saldo Pingo Doce (11,40)": card balance spent, a way of paying (spec 009,
+            # FR-007). The receipt counts it in TOTAL POUPANÇA and takes it off TOTAL A PAGAR; it is not a
+            # discount. Only the ones here, before the total: a voucher under "Pagamentos" pays TOTAL A PAGAR.
+            if m := BALANCE.match(text):
+                balance += parse_money_cents(m.group("amount")) or 0
+                continue
             if m := _DISCOUNT.match(text):
                 if parsed_lines and not parsed_lines[-1].unresolved:
                     target = parsed_lines[-1]
@@ -95,6 +103,10 @@ class PingoDoceParser:
         if total is None:  # receipts without savings may print only "TOTAL"
             total, total_conf = gross, (0.9 if gross is not None else 0.0)
         subtotal, tax = parse_tax_table(summary, base_col=0, tax_col=1)
+        if balance:  # the VAT table then covers only what was left to pay, not the purchase
+            total = total + balance if total is not None else None
+            savings = savings - balance if savings is not None else None
+            subtotal = tax = None
 
         purchase_at, date_conf = choose_purchase_datetime(parse_date_candidates(lines))
         ref = next((m.group("ref") for line in lines if (m := _REF.search(line.text))), None)

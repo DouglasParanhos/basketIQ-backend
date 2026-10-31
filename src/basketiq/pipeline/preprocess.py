@@ -46,6 +46,12 @@ MAX_TILES = 12  # bounds the OCR time of a very long receipt
 def load_image(data: bytes) -> Image.Image:
     with Image.open(io.BytesIO(data)) as raw:
         upright = ImageOps.exif_transpose(raw)  # phone photos carry their rotation in EXIF
+        if upright.mode in ("RGBA", "LA", "PA") or "transparency" in upright.info:
+            # A screenshot's transparent background would turn black and pass for a dark desk.
+            rgba = upright.convert("RGBA")
+            white = Image.new("RGB", rgba.size, "white")
+            white.paste(rgba, mask=rgba.getchannel("A"))
+            return white
         return upright.convert("RGB")
 
 
