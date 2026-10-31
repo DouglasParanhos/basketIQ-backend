@@ -16,12 +16,13 @@ right. The lines and the payments do:
 
 from __future__ import annotations
 
+import itertools
 import re
 from collections.abc import Iterable
 from decimal import Decimal
 
-from basketiq.domain.money import parse_money_cents
-from basketiq.pipeline.parsers.base import MONEY
+from basketiq.domain.money import one_digit_apart, parse_money_cents
+from basketiq.pipeline.parsers.base import COUNT_INFERRED_CONFIDENCE, MONEY
 from basketiq.pipeline.schema import ParsedLine, TextLine
 
 _EURO = r"(?:\s*(?:€|EUR))?"
@@ -126,3 +127,57 @@ def settle_savings(items: list[ParsedLine], total: int | None) -> None:
         if item.discount_cents and item.quantity:
             item.line_total_cents = (item.line_total_cents or 0) + item.discount_cents
             item.unit_price_cents = int((Decimal(item.line_total_cents) / item.quantity).to_integral_value())
+
+
+MAX_UNCLASSED = 8  # items without a VAT class tried against the class totals (2^8 ways at most)
+
+
+def settle_by_class(items: list[ParsedLine], lines: list[TextLine], class_total: re.Pattern[str]) -> None:
+    """Settle the items against the total the receipt prints for each VAT class (`class_total` matches such a
+    row, with groups `cls` and `total`). When the items of a class add up to it, or do with one digit of one
+    item changed (4,26 read for 4,25), the misread digit is corrected and the line reviewed, and items whose
+    class letter the OCR lost get the class whose total they complete. Only a single way to complete a total
+    is taken; anything else is left as read."""
+    pool = [i for i in items if i.tax_code is None and i.line_total_cents is not None][:MAX_UNCLASSED]
+    for line in lines:
+        if (
+            not (m := class_total.match(line.text.strip()))
+            or (total := parse_money_cents(m.group("total"))) is None
+        ):
+            continue
+        cls = m.group("cls")
+        tagged = [i for i in items if i.tax_code == cls and i.line_total_cents is not None]
+        ways = []
+        for n in range(len(pool) + 1):
+            for picked in itertools.combinations(pool, n):
+                members = tagged + list(picked)
+                delta = (
+                    sum(i.line_total_cents - i.discount_cents for i in members if i.line_total_cents) - total
+                )
+                fixable = (
+                    [
+                        i
+                        for i in members
+                        if i.line_total_cents
+                        and one_digit_apart(i.line_total_cents, i.line_total_cents - delta)
+                    ]
+                    if delta
+                    else []
+                )
+                if delta == 0 or len(fixable) == 1:
+                    ways.append((members, fixable, delta))
+        if len(ways) != 1:
+            continue
+        members, fixable, delta = ways[0]
+        for item in fixable:
+            item.line_total_cents = (item.line_total_cents or 0) - delta
+            if item.quantity == 1:
+                item.unit_price_cents = item.line_total_cents
+            for name in ("line_total", "unit_price"):
+                item.field_confidence[name] = min(
+                    item.field_confidence.get(name, 1.0), COUNT_INFERRED_CONFIDENCE
+                )
+            item.evidence.append(line.text.strip())
+        for item in members:
+            item.tax_code = cls
+        pool = [i for i in pool if i not in members]

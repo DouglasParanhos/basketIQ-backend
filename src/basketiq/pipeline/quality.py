@@ -5,8 +5,6 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
-from basketiq.pipeline.preprocess import crop_to_paper
-
 BLUR_VARIANCE_MIN = 60.0
 DARK_MEAN_MAX = 70.0
 MIN_TOKENS = 15
@@ -24,14 +22,15 @@ WARNING_MESSAGES = {
 }
 
 
-def image_warnings(image: Image.Image) -> list[str]:
+def image_warnings(image: Image.Image, paper: Image.Image) -> list[str]:
+    """`paper` is the receipt cut out of `image` (see `preprocess.flatten_paper`)."""
     gray = image.convert("L")
     gray.thumbnail((1200, 1200))
     arr = np.asarray(gray, dtype=np.float32)
     warnings: list[str] = []
     if _laplacian_variance(arr) < BLUR_VARIANCE_MIN:
         warnings.append("blurry")
-    if crop_to_paper(image).width < MIN_PAPER_WIDTH:
+    if paper.width < MIN_PAPER_WIDTH:
         warnings.append("low_resolution")
     if float(arr.mean()) < DARK_MEAN_MAX:
         warnings.append("too_dark")

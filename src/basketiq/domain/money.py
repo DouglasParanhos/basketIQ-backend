@@ -51,6 +51,12 @@ def format_cents(cents: int | None) -> str:
     return f"{sign}{cents // 100},{cents % 100:02d} €"
 
 
+def one_digit_apart(a: int, b: int) -> bool:
+    """Two amounts that differ in exactly one printed digit (the OCR read 2,68 as 2,60)."""
+    x, y = str(a), str(b)
+    return len(x) == len(y) and sum(p != q for p, q in zip(x, y, strict=True)) == 1
+
+
 def multiply_cents(quantity: Decimal, unit_price_cents: int) -> int:
     """quantity × unit price, rounded half-up to the cent (as printed on receipts)."""
     return int((quantity * Decimal(unit_price_cents)).quantize(Decimal(1), rounding=ROUND_HALF_UP))

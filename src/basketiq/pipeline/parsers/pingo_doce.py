@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 
 from basketiq.domain.money import parse_money_cents
-from basketiq.domain.status import Merchant
+from basketiq.domain.status import Merchant, ProcessingRoute
 from basketiq.pipeline.parsers.base import (
     MONEY,
     RULE_EXACT,
@@ -33,11 +33,13 @@ from basketiq.pipeline.parsers.base import (
 )
 from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt
 
-_ITEM = re.compile(
-    rf"^(?P<tax>[A-Z])\s+(?P<desc>.+?)\s+"
-    rf"(?:(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*[Xx]\s*(?P<unit>{MONEY})\s+)?"
-    rf"(?P<total>{MONEY})$"
+_ITEM_BODY = (
+    rf"(?P<desc>.+?)\s+(?:(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*[Xx]\s*(?P<unit>{MONEY})\s+)?(?P<total>{MONEY})$"
 )
+_ITEM = re.compile(rf"^(?P<tax>[A-Z])\s+{_ITEM_BODY}")
+# A photo of the receipt may lose the VAT letter ("QJ HALLOUMI PDIG200G 2,89"); the name then starts with a
+# letter or a digit, so OCR debris ("?? ## 1,20") stays unresolved.
+_PHOTO_ITEM = re.compile(rf"^(?:(?P<tax>[A-Z])\s+)?(?=[^\W_]){_ITEM_BODY}")
 # Tolerant to OCR damage seen in practice: "PoupanaImediata(1,40)", "TOTAL POUPANXA (1,40)".
 _DISCOUNT = re.compile(rf"^(?:Poupan|Desconto|Promo|Cup)[^\d()]*\(?\s*-?(?P<amount>{MONEY})\s*\)?$", re.I)
 _TOTAL_GROSS = re.compile(rf"^TOTAL\s+(?P<amount>{MONEY})$")
@@ -57,6 +59,7 @@ class PingoDoceParser:
         item_zone = lines[(start + 1 if start is not None else 0) : end if end is not None else len(lines)]
         summary = lines[end:] if end is not None else []
 
+        item_shape = _PHOTO_ITEM if doc.route == ProcessingRoute.LOCAL_OCR else _ITEM
         parsed_lines: list[ParsedLine] = []
         for line in item_zone:
             text = line.text.strip()
@@ -69,7 +72,7 @@ class PingoDoceParser:
                 else:
                     parsed_lines.append(unresolved_line(line))
                 continue
-            if m := _ITEM.match(text):
+            if m := item_shape.match(text):
                 parsed_lines.append(
                     build_item(
                         description=m.group("desc"),

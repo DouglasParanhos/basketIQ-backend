@@ -45,7 +45,7 @@ from basketiq.pipeline.parsers.base import (
 )
 from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt, TextLine
 
-_TAX = r"^\((?P<tax>[A-Z])\)\s+"
+_TAX = r"^\(?(?P<tax>[A-Z])\)\s+"  # "(A)"; a photo may lose the opening bracket
 _NAME = re.compile(rf"{_TAX}(?P<desc>.+)$")
 _ITEM = re.compile(rf"{_TAX}(?P<desc>.+?)\s+(?P<total>{MONEY})$")
 _QTY = re.compile(

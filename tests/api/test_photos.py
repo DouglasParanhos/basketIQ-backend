@@ -10,13 +10,13 @@ from PIL import Image
 
 from basketiq.pipeline.schema import TextToken
 from tests.api.flows import process, upload
-from tests.helpers import make_png, sha256
+from tests.helpers import StubOcr, make_png, sha256
 
 FIRST = ["LIDL & Cia", "NIF:503340855", "EUR", "LEITE 0,79 B", "PAO 1,29 B", "ARROZ 1,10 B", "OVOS 2,50 B"]
 SECOND = ["ARROZ 1,10 B", "OVOS 2,50 B", "SUMO 1,99 B", "Total 7,67", "10.10.26 13:45"]
 
 
-class OneReadingPerPhoto:
+class OneReadingPerPhoto(StubOcr):
     """An OCR that reads a different set of lines for every photo it is handed, in order."""
 
     name = "per-photo-ocr"

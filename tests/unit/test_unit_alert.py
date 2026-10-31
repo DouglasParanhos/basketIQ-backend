@@ -30,7 +30,8 @@ def test_whole_value_printed_like_a_weight_asks_units_or_kg() -> None:
     parsed = parse(["Artigos", " E QUEQUE 4,000 X 0,69 2,76", " E PAO 0,55", "TOTAL 3,31", "Multibanco 3,31"])
     cake, bread = parsed.lines
     assert (cake.quantity, cake.unit_price_cents, cake.line_total_cents) == (Decimal("4.000"), 69, 276)
-    assert unit_confidence(cake) == UNIT_ALERT_CONFIDENCE  # the reading is kept: the unit is what is in doubt
+    assert cake.unit == "un"  # a whole kilo off a scale is rare: read as a count
+    assert unit_confidence(cake) == UNIT_ALERT_CONFIDENCE  # but the unit is still asked
     assert unit_confidence(bread) is None
 
     # The generic parser caps every field below the threshold, so the unit is flagged along with the rest.

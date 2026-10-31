@@ -14,13 +14,12 @@ Layout (calibrated on one real photographed "Fatura", 2026):
 
 Only these shapes are calibrated. Any other priced line (discounts, weighed items, ...) is kept as an
 unresolved line for review instead of being guessed. A quantity digit lost by the OCR is rebuilt
-from total / unit price when that is a whole number, at a lower confidence.
+from total / unit price (see `count_from_total`), at a lower confidence.
 """
 
 from __future__ import annotations
 
 import re
-from decimal import Decimal
 
 from basketiq.domain.money import parse_money_cents
 from basketiq.domain.status import Merchant
@@ -30,6 +29,7 @@ from basketiq.pipeline.parsers.base import (
     RULE_IMPLICIT_QTY,
     build_item,
     choose_purchase_datetime,
+    count_from_total,
     find_amount,
     index_of,
     line_before,
@@ -141,12 +141,12 @@ def _quantity_item(
     qty_text = qty_match.group("qty")
     rebuilt = qty_text is None
     if rebuilt:
-        unit = parse_money_cents(qty_match.group("unit"))
-        total = parse_money_cents(qty_match.group("total"))
-        ratio = Decimal(total or 0) / Decimal(unit or 1)
-        if not unit or ratio != ratio.to_integral_value() or ratio < 1:
+        count = count_from_total(
+            parse_money_cents(qty_match.group("total")), parse_money_cents(qty_match.group("unit"))
+        )
+        if count is None:
             return unresolved_line(qty_line)
-        qty_text = str(int(ratio))
+        qty_text = str(count)
     item = build_item(
         description=desc.group("desc"),
         total_text=qty_match.group("total"),

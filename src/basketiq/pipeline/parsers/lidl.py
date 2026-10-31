@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 
 from basketiq.domain.money import multiply_cents, parse_decimal, parse_money_cents
-from basketiq.domain.status import Merchant, Unit
+from basketiq.domain.status import Merchant, ProcessingRoute, Unit
 from basketiq.pipeline.parsers.base import (
     MONEY,
     RULE_EXACT,
@@ -35,7 +35,12 @@ from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt
 
 UNCALIBRATED = 0.85
 
-_ITEM = re.compile(rf"^(?P<desc>.*?[A-Za-zÀ-ÿ].*?)\s+(?P<total>-?{MONEY})\s+(?P<tax>[A-F])$")
+_NAME_AND_PRICE = rf"^(?P<desc>.*?[A-Za-zÀ-ÿ].*?)\s+(?P<total>-?{MONEY})"
+_ITEM = re.compile(rf"{_NAME_AND_PRICE}\s+(?P<tax>[A-F])$")
+# On a photo the VAT class after the price may be lost (glare), misread ("3,49 8" for B) or followed by a
+# stray character ("3,49 B E"); only a letter A-F is kept. A searchable PDF prints it exactly, so there a
+# missing class means the line is not a Lidl item.
+_PHOTO_ITEM = re.compile(rf"{_NAME_AND_PRICE}(?:\s+(?P<tax>\S))?(?:\s+\S)?$")
 _QTY = re.compile(
     rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?P<kg>kg)?\s*[xX]\s*(?P<unit>{MONEY})(?:\s*EUR/kg)?"
     rf"(?:\s+(?P<total>{MONEY})\s+(?P<tax>[A-E]))?$"
@@ -64,6 +69,7 @@ class LidlParser:
         item_zone = lines[start + 1 : end]
         summary = lines[end:]
 
+        item_shape = _PHOTO_ITEM if doc.route == ProcessingRoute.LOCAL_OCR else _ITEM
         parsed: list[ParsedLine] = []
         pending_description: str | None = None
         for line in item_zone:
@@ -78,7 +84,7 @@ class LidlParser:
                         qty_text=m.group("qty"),
                         unit_price_text=m.group("unit"),
                         unit_printed=bool(m.group("kg")),
-                        tax_code=m.group("tax"),
+                        tax_code=_vat_class(m.group("tax")),
                         line_conf=line.confidence * UNCALIBRATED,
                         evidence=[pending_description or "", text],
                     )
@@ -109,12 +115,12 @@ class LidlParser:
                     parsed.append(unresolved_line(line))
                 pending_description = None
                 continue
-            if m := _ITEM.match(text):
+            if m := item_shape.match(text):
                 parsed.append(
                     build_item(
                         description=m.group("desc"),
                         total_text=m.group("total"),
-                        tax_code=m.group("tax"),
+                        tax_code=_vat_class(m.group("tax")),
                         line_conf=line.confidence,
                         evidence=[text],
                     )
@@ -171,3 +177,7 @@ def _apply_quantity(
     item.field_confidence["quantity"] = round(rule * conf, 3)
     item.field_confidence["unit_price"] = round(rule * conf, 3)
     item.evidence.append(evidence)
+
+
+def _vat_class(text: str | None) -> str | None:
+    return text if text and text in "ABCDEF" else None

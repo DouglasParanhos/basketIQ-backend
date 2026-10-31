@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
-from basketiq.domain.money import multiply_cents, parse_decimal, parse_money_cents
+from basketiq.domain.money import multiply_cents, one_digit_apart, parse_decimal, parse_money_cents
 from basketiq.domain.status import Merchant, Unit
 from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt, TextLine
 
@@ -47,6 +47,15 @@ class DateCandidate:
     source: str
 
 
+_PT_MONTHS = {
+    name: number
+    for number, name in enumerate(
+        ("jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"), start=1
+    )
+}
+_PT_MONTH = "|".join(name.replace("o", "[o0]") for name in _PT_MONTHS)
+
+
 def parse_date_candidates(lines: Iterable[TextLine]) -> list[DateCandidate]:
     """Collect every plausible date/time printed on the receipt. Invalid dates (e.g. an OCR
     misread month 18) are dropped instead of guessed."""
@@ -54,7 +63,18 @@ def parse_date_candidates(lines: Iterable[TextLine]) -> list[DateCandidate]:
         (re.compile(r"(?P<y>20\d{2})-(?P<m>\d{2})-(?P<d>\d{2})(?:\s+(?P<H>\d{2}):(?P<M>\d{2}))?"), "iso"),
         (re.compile(r"(?P<d>\d{2})/(?P<m>\d{2})/(?P<y>20\d{2})(?:\s+(?P<H>\d{2}):(?P<M>\d{2}))?"), "dmy"),
         (re.compile(r"\b(?P<d>\d{2})\.(?P<m>\d{2})\.(?P<y>\d{2})\s+(?P<H>\d{2}):(?P<M>\d{2})"), "dmy2"),
-        (re.compile(r"^(?P<y>\d{2})-(?P<m>\d{2})-(?P<d>\d{2})\s+(?P<H>\d{2}):(?P<M>\d{2})"), "ymd2"),
+        # The OCR sometimes doubles a dash ("26--10-24").
+        (
+            re.compile(r"^(?P<y>\d{2})-{1,2}(?P<m>\d{2})-{1,2}(?P<d>\d{2})\s+(?P<H>\d{2}):(?P<M>\d{2})"),
+            "ymd2",
+        ),
+        # "24/out/26 16:50" (El Corte Inglés); the OCR may read the "o" of "out" as a zero.
+        (
+            re.compile(
+                rf"\b(?P<d>\d{{2}})/(?P<m>{_PT_MONTH})/(?P<y>\d{{2}})\s+(?P<H>\d{{2}}):(?P<M>\d{{2}})", re.I
+            ),
+            "dmy_pt",
+        ),
     ]
     found: list[DateCandidate] = []
     for line in lines:
@@ -64,8 +84,10 @@ def parse_date_candidates(lines: Iterable[TextLine]) -> list[DateCandidate]:
                 year = int(m.group("y"))
                 if year < 100:
                     year += 2000
+                month = m.group("m")
+                month_number = int(month) if month.isdigit() else _PT_MONTHS[month.lower().replace("0", "o")]
                 try:
-                    d = date(year, int(m.group("m")), int(m.group("d")))
+                    d = date(year, month_number, int(m.group("d")))
                 except ValueError:
                     continue
                 t: time | None = None
@@ -131,6 +153,9 @@ def build_item(
             and abs(multiply_cents(qty, unit_price) - total) <= 1
         )
         rule = RULE_EXACT if consistent else RULE_INCONSISTENT
+        if not consistent and qty is not None and qty == qty.to_integral_value():
+            # "2 X 2,60 5,36": the line total is what the receipt adds up, so it stands; the line is reviewed.
+            unit_price = _misread_unit_price(total, int(qty), unit_price) or unit_price
         conf = {
             "quantity": rule * line_conf,
             "unit_price": rule * line_conf,
@@ -159,6 +184,35 @@ def build_item(
     if qty_text is not None and unit_price_text is not None:
         flag_ambiguous_unit(item, qty_text, unit_printed)
     return item
+
+
+def one_letter_apart(a: str, b: str) -> bool:
+    """Two different words, one letter read as another, added or lost ("CESCONTO" for "DESCONTO")."""
+    if a == b or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
+    short, long = sorted((a, b), key=len)
+    return any(long[:i] + long[i + 1 :] == short for i in range(len(long)))
+
+
+def _misread_unit_price(total: int | None, count: int, unit: int | None) -> int | None:
+    """total / count, when it is the printed unit price with one digit misread (2,68 read as 2,60)."""
+    if not total or not unit or count < 1 or total % count:
+        return None
+    return total // count if one_digit_apart(total // count, unit) else None
+
+
+def count_from_total(total: int | None, unit: int | None) -> int | None:
+    """The count of a line that the OCR lost ("X 2,68 5,36"): total / unit price when it divides into a
+    whole count, or else the nearest whole count when total / count is the printed unit price with one digit
+    misread ("X 2,60 5,36" is 2 x 2,68; `build_item` then corrects the price). None when neither holds."""
+    if not total or not unit or total < 0 or unit < 0:
+        return None
+    if total % unit == 0:
+        return total // unit
+    count = round(total / unit)
+    return count if count >= 2 and _misread_unit_price(total, count, unit) else None
 
 
 def apply_deposit_quantities(lines: Iterable[ParsedLine]) -> None:
@@ -239,8 +293,11 @@ def index_of(lines: list[TextLine], predicate: Callable[[str], bool], start: int
 
 
 def is_weight_quantity(qty_text: str, kg_printed: bool = False) -> bool:
-    """Weighed quantities are printed with decimals ("0,513", "1,000", "1,004 kg"), counts without ("2")."""
-    return kg_printed or "," in qty_text or "." in qty_text
+    """Weighed quantities are printed with decimals ("0,513", "1,004 kg"), counts without ("2"). A whole value
+    printed like a weight ("4,000 X 0,69", the Pingo Doce bakery) is read as a count unless "kg" is printed:
+    a scale stops on a whole kilo about once in a thousand weighings. The unit alert still asks (D1b)."""
+    text = qty_text.strip()
+    return kg_printed or (("," in text or "." in text) and not _WHOLE_WEIGHT.fullmatch(text))
 
 
 _NOT_A_STORE = re.compile(

@@ -42,10 +42,14 @@ def test_a_photo_whose_column_title_has_slashes_gives_its_items() -> None:
 
 @pytest.mark.seen_once  # seen on 1 photo: a count the OCR dropped
 @pytest.mark.req("F-48")
-def test_a_misread_unit_price_is_not_guessed_and_keeps_name_and_total() -> None:
+def test_a_unit_price_with_one_misread_digit_is_recovered_from_the_total_and_reviewed() -> None:
+    """ "X 2,60 5,36": 5,36 is no whole number of 2,60, but it is 2 x 2,68, one digit away from what was read.
+    The line total is the amount the receipt adds up, so it stands; the count and the price are reviewed."""
     first = read("auchan_items").lines[0]
-    assert first.unresolved  # "X 2,60 5,36": 5,36 is not a whole number of 2,60
-    assert first.line_total_cents == 536
+    assert not first.unresolved
+    assert (first.quantity, first.unit_price_cents, first.line_total_cents) == (Decimal(2), 268, 536)
+    assert first.field_confidence["quantity"] <= 0.5
+    assert first.field_confidence["unit_price"] < 0.8
 
 
 @pytest.mark.seen_once  # seen on 1 photo: the euro sign read as a lone e
@@ -104,12 +108,11 @@ def test_second_aldi_photo_misread_discount_word_applies_to_its_item() -> None:
 
 @pytest.mark.seen_once  # seen on 1 photo: the euro sign of "€/kg" read as "e"
 @pytest.mark.req("F-53")
-def test_second_aldi_photo_e_slash_kg_resolves_and_a_single_price_with_ei_stays_for_review() -> None:
+def test_second_aldi_photo_e_slash_kg_resolves_and_a_price_with_ei_is_read() -> None:
     parsed = read("aldi2_items")
     apple = next(line for line in parsed.lines if "PINK" in line.raw_description)
     assert not apple.unresolved
     assert (apple.quantity, apple.unit_price_cents, apple.line_total_cents) == (Decimal("0.586"), 299, 175)
     onion = next(line for line in parsed.lines if line.raw_description.startswith("CEBOLA"))
-    assert (
-        onion.unresolved and onion.line_total_cents == 199
-    )  # "1,99 ei": no arithmetic can close, so reviewed
+    assert not onion.unresolved  # "1,99 ei": "€ 1" (euro sign and VAT class) as the OCR read it
+    assert (onion.quantity, onion.line_total_cents) == (Decimal(1), 199)

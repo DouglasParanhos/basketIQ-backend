@@ -26,7 +26,7 @@ from basketiq.pipeline.ocr.base import OcrUnavailableError
 from basketiq.pipeline.parsers import parser_for
 from basketiq.pipeline.parsers.base import Parser, apply_deposit_quantities
 from basketiq.pipeline.pdf_text import extract_pdf_text, has_usable_text
-from basketiq.pipeline.preprocess import load_image, ocr_tiles, rasterize_pdf
+from basketiq.pipeline.preprocess import flatten_paper, load_image, ocr_tiles, rasterize_pdf
 from basketiq.pipeline.qr import (
     QR_BUDGET_S,
     AtQr,
@@ -36,7 +36,8 @@ from basketiq.pipeline.qr import (
     atcud_matches_print,
     read_at_qr,
 )
-from basketiq.pipeline.quality import image_warnings, ocr_warnings
+from basketiq.pipeline.quality import MIN_PAPER_WIDTH, image_warnings, ocr_warnings
+from basketiq.pipeline.recognition import read_small_print, read_tiles
 from basketiq.pipeline.schema import DocumentText, ParsedReceipt, TextToken
 from basketiq.pipeline.stitch import JoinNote, join_documents
 from basketiq.pipeline.validation import DocumentRejectedError, validate_document
@@ -212,12 +213,15 @@ def _extract_text(data: bytes, source_type: SourceType, ocr: OcrEngine, out: Pip
         images = rasterize_pdf(data)  # scanned PDF: no usable text layer
     else:
         images = [load_image(data)]
-        out.quality_warnings.extend(w for w in image_warnings(images[0]) if w not in out.quality_warnings)
 
     tokens: list[TextToken] = []
     try:
         for page, image in enumerate(images):
-            tokens.extend(_recognize_page(ocr, image, page))
+            paper = _upright_paper(ocr, image)
+            if source_type == SourceType.IMAGE:
+                new = image_warnings(image, paper)
+                out.quality_warnings.extend(w for w in new if w not in out.quality_warnings)
+            tokens.extend(_recognize_page(ocr, paper, page))
     except OcrUnavailableError as exc:
         raise TemporaryProcessingError("OCR unavailable") from exc
     except Exception as exc:
@@ -235,14 +239,20 @@ def _extract_text(data: bytes, source_type: SourceType, ocr: OcrEngine, out: Pip
     return doc
 
 
-def _recognize_page(ocr: OcrEngine, image: Image.Image, page: int) -> list[TextToken]:
-    """OCR one page slice by slice and put every token back at its place on the page."""
-    tokens: list[TextToken] = []
-    for tile in ocr_tiles(image):
-        for token in ocr.recognize(tile.image, page=page):
-            centre = tile.top + (token.y0 + token.y1) / 2
-            if tile.own_top <= centre < tile.own_bottom:
-                tokens.append(token.model_copy(update={"y0": token.y0 + tile.top, "y1": token.y1 + tile.top}))
+def _upright_paper(ocr: OcrEngine, image: Image.Image) -> Image.Image:
+    """The receipt cut out of the photo, straightened and turned so its text reads upright."""
+    paper = flatten_paper(image)
+    angle = ocr.orientation(paper)
+    return paper.rotate(angle, expand=True) if angle else paper
+
+
+def _recognize_page(ocr: OcrEngine, paper: Image.Image, page: int) -> list[TextToken]:
+    """OCR the paper slice by slice and put every token back at its place on the page; a small receipt gets
+    extra looks (see `recognition`)."""
+    tiles = ocr_tiles(paper)
+    tokens = read_tiles(ocr, tiles, page)
+    if paper.width < MIN_PAPER_WIDTH:
+        tokens = read_small_print(ocr, paper, tiles[0].image.width, tokens, page)
     return tokens
 
 

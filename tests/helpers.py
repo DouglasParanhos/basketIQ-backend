@@ -6,13 +6,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 from reportlab.lib.pagesizes import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from basketiq.domain.status import ProcessingRoute
 from basketiq.pipeline.layout import group_into_lines
+from basketiq.pipeline.preprocess import perspective_coefficients
 from basketiq.pipeline.schema import DocumentText, TextToken
 
 ROOT = Path(__file__).resolve().parent
@@ -41,7 +42,23 @@ def doc_from_cells(rows: list[list[tuple[str, float, float]]]) -> DocumentText:
     return DocumentText(lines=group_into_lines(tokens), route=ProcessingRoute.PDF_TEXT, engine="test")
 
 
-class FakeOcr:
+class StubOcr:
+    """An OCR engine that finds nothing: the pages stay as they are and no text is read. Fakes override what
+    their test needs."""
+
+    name = "stub-ocr"
+
+    def orientation(self, image: Image.Image) -> int:
+        return 0
+
+    def read_line(self, image: Image.Image) -> tuple[str, float]:
+        return "", 0.0
+
+    def recognize(self, image: Image.Image, page: int = 0) -> list[TextToken]:
+        return []
+
+
+class FakeOcr(StubOcr):
     """Deterministic OCR: returns the configured lines whatever the image is."""
 
     name = "fake-ocr"
@@ -105,6 +122,24 @@ def make_pdf(lines: list[str]) -> bytes:
     c.showPage()
     c.save()
     return buf.getvalue()
+
+
+def photo_like(img: Image.Image) -> Image.Image:
+    """Mild blur and sensor noise (seeded, so the photos are identical on every run)."""
+    blurred = img.filter(ImageFilter.GaussianBlur(0.8))
+    noise = np.random.default_rng(42).normal(0, 6, (blurred.height, blurred.width, 1))
+    return Image.fromarray(np.clip(np.asarray(blurred) + noise, 0, 255).astype(np.uint8))
+
+
+def seen_at_an_angle(img: Image.Image, inset: float, fill: tuple[int, ...]) -> Image.Image:
+    """Photographed from below at an angle: the far (top) end `inset` pixels narrower on each side."""
+    w, h = float(img.width), float(img.height)
+    output = ((inset, 0.0), (w - inset, 0.0), (w, h), (0.0, h))
+    source = ((0.0, 0.0), (w, 0.0), (w, h), (0.0, h))
+    coefficients = perspective_coefficients(output, source)
+    return img.transform(
+        img.size, Image.Transform.PERSPECTIVE, coefficients, Image.Resampling.BICUBIC, fillcolor=fill
+    )
 
 
 def make_png(width: int = 600, height: int = 900, color: str | tuple[int, int, int] = "white") -> bytes:

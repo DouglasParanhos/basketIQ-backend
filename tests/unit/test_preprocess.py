@@ -7,8 +7,9 @@ import pytest
 from PIL import Image, ImageDraw
 
 from basketiq.pipeline import orchestrator, preprocess
-from basketiq.pipeline.preprocess import OcrTile, crop_to_paper, ocr_tiles, tile_spans
+from basketiq.pipeline.preprocess import OcrTile, crop_to_paper, flatten_paper, ocr_tiles, tile_spans
 from basketiq.pipeline.schema import TextToken
+from tests.helpers import StubOcr
 
 
 def _photo(paper: tuple[int, int, int, int] | None, size: tuple[int, int] = (900, 1600)) -> Image.Image:
@@ -51,13 +52,13 @@ def test_slices_overlap_and_each_row_belongs_to_exactly_one(height: int) -> None
 
 @pytest.mark.req("RF-05")
 def test_a_tall_photo_is_cropped_then_sliced_at_the_slice_width() -> None:
-    tiles = ocr_tiles(_photo((350, 20, 580, 1590)))
+    tiles = ocr_tiles(flatten_paper(_photo((350, 20, 580, 1590))))
     assert len(tiles) >= 2
     assert {t.image.width for t in tiles} == {preprocess.TILE_WIDTH}
     assert math.isinf(OcrTile(tiles[0].image, 0, 0.0, math.inf).own_bottom)
 
 
-class _RowsOcr:
+class _RowsOcr(StubOcr):
     """Reads a text at every 100th row of the receipt, whatever slice it is handed."""
 
     name = "rows"

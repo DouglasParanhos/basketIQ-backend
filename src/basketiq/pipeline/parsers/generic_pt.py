@@ -41,9 +41,11 @@ from basketiq.pipeline.parsers.base import (
     RULE_EXACT,
     build_item,
     choose_purchase_datetime,
+    count_from_total,
     flag_ambiguous_unit,
     guess_merchant_name,
     is_weight_quantity,
+    one_letter_apart,
     parse_date_candidates,
     terminal_store_label,
     unresolved_line,
@@ -57,17 +59,22 @@ _MIN_CODE_ROWS = 2  # rows that must start with a VAT code of the same width bef
 CALIBRATED_CAP = 0.9  # merchants read from a few real samples: reviewed when the OCR is unsure
 PAIRED_CONFIDENCE = 0.7  # a price joined to a description that was on another row: always reviewed
 
-_EURO = r"(?:\s*(?:€|EUR|[eE](?=\s|$)))?"  # a lone "e" is the euro sign as the OCR read it
-_TAX = r"(?:\s*[A-Z0-9]){0,2}(?:\s*[-–])?"  # the VAT class, and a stray character the OCR may add after it
+_EURO = r"(?:\s*(?:€|EUR|[eEcC](?=\s|$)))?"  # a lone "e" or "c" is the euro sign as the OCR read it
+# The VAT class, and a stray character the OCR may add after it. A photo of a small receipt misreads the class
+# too: "€ 1" as "ei" or "el", "B" as "0", "o", ".0" or ")0".
+_TAX = r"(?:\s*[A-Za-z0-9).]){0,2}(?:\s*[-–])?"
 _ITEM = re.compile(
     rf"^(?:\(?[A-Z]\)?\s+)?(?:(?P<lead>\d{{1,2}})\s+)?(?P<desc>.*?[A-Za-zÀ-ÿ]{{2}}.*?)\s+"
     rf"(?:(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?P<qunit>kg|un)?\s*[xX×]\s*(?P<unit>{MONEY}){_EURO}\s+"
     rf"|(?P<unit2>{MONEY}){_EURO}\s+(?=-?{MONEY}))?"
-    rf"(?P<total>-?{MONEY}){_EURO}{_TAX}$"
+    rf"(?P<total>-?{MONEY})(?!\d){_EURO}{_TAX}$"  # "810.285" is no amount followed by a class "5"
 )
-# "0,298 kg x 1,99 €/kg", "6 x 0,99 €", "2x0,10€" (no description)
+# "0,298 kg x 1,99 €/kg", "6 x 0,99 €", "2x0,10€" (no description); on a tilted photo the VAT class of the
+# next row may land at its end ("6 x 0,99 € 1")
 _QTY_LINE = re.compile(
-    rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?P<kg>kg)?\s*[xX×]\s*(?P<unit>{MONEY}){_EURO}(?:\s*/\s*kg)?$", re.I
+    rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?P<kg>kg)?\s*[xX×]\s*(?P<unit>{MONEY}){_EURO}(?:\s*/\s*kg)?"
+    rf"(?:\s+[0-9A-Z])?$",
+    re.I,
 )
 # "1,004 kg 2,50 €/kg 2,51 B", "0,298 kg x 1,99 €/kg 0,59 € 1": quantity, unit price and total, under a
 # description-only line or after the description when the OCR joined them ("CURGETE 0,444 kg x ...")
@@ -99,7 +106,9 @@ _LOST_COUNT = re.compile(rf"^[xX×]\s*(?P<unit>{MONEY}){_EURO}\s+(?P<total>{MONE
 _SAVING_PLAIN = re.compile(rf"^(?:Poupan[çc]a|Desconto)\s+(?P<amount>{MONEY}){_EURO}$", re.I)
 _CATEGORY = re.compile(r"^[A-Za-zÀ-ÿ&/+.' -]+:$")  # "Charcutaria&Queijos:"
 _TAGGED = re.compile(r"^\((?P<tax>[A-Z0-9])\)\s+(?P<desc>.+)$")  # "(A) QUEIJO FRESCO"
-_AMOUNT_ONLY = re.compile(rf"^(?P<total>{MONEY}){_EURO}{_TAX}$")
+_PRICE_TAIL = rf"(?P<total>{MONEY})(?!\d){_EURO}{_TAX}$"
+_AMOUNT_AT_END = re.compile(_PRICE_TAIL)  # .match: a price alone on its row; .search: a price at its end
+_COLUMN_TITLE = re.compile(r"PRE[CÇ]O|IVA|VALOR|TOTAL", re.I)
 _HEADER_NOISE = re.compile(r"^(?:DENOMINA[CÇ][AÃ]O|DESCRI[CÇ][AÃ]O)\s+|\s+PRE[CÇ]O\s+IVA$", re.I)
 
 
@@ -243,6 +252,12 @@ class GenericPtParser:
                 )
                 pending_description = pending_tax = None
                 continue
+            if (m := _QTY_TOTAL.match(text)) and _weight_closes(m):
+                # "4 x 0,14 € 0,56 € 1" with no name before it: a count printed before its item (Aldi), whose
+                # total a tilt lifted onto the count's row. Like a weighed line, it waits for the next name.
+                flush_weighed()
+                pending_weighed = (m, line)
+                continue
             if (m := _LOST_COUNT.match(text)) and pending_description:
                 add(_item_with_lost_count(pending_description, m, pending_tax, line, text))
                 pending_description = pending_tax = None
@@ -257,12 +272,18 @@ class GenericPtParser:
                 continue
             if m := _ITEM.match(text):
                 flush_amount()
+                if _COLUMN_TITLE.fullmatch(_description(m)):
+                    # "DENOMINAÇÃO PREÇO 2,99 € 1": a tilt lifted the first item's price onto the column
+                    # titles. Like a price alone, it waits for the name on the next row.
+                    pending_amount = line
+                    pending_qty = pending_description = pending_tax = None
+                    continue
                 item = _item(m, line, text, self._from_ocr)
                 if pending_qty is not None and _explains(pending_qty, item):
                     _apply_quantity(item, pending_qty, line.confidence, pending_text)
                 pending_qty = pending_description = pending_tax = None
                 add(item)
-            elif _AMOUNT_ONLY.match(text):  # a price alone: the OCR put it on a row of its own
+            elif _AMOUNT_AT_END.match(text):  # a price alone: the OCR put it on a row of its own
                 flush_amount()
                 if pending_description:
                     add(_orphan_item(pending_description, line))
@@ -306,11 +327,12 @@ def _weighed_item(m: re.Match[str], description: str, line_conf: float, evidence
 def _item_with_lost_count(
     description: str, m: re.Match[str], tax: str | None, line: TextLine, text: str
 ) -> ParsedLine:
-    """The count is the line total divided by the unit price, when that divides exactly into two or more.
-    It was not printed, so the line is reviewed (the unit and the prices are read, the count is not)."""
-    unit, total = parse_money_cents(m.group("unit")), parse_money_cents(m.group("total"))
-    if not unit or not total or total % unit or total // unit < 2:
-        # Not a whole count (a misread digit, or a weight): the name and the total are kept for the person.
+    """The count is the line total divided by the unit price, when that comes to two or more (see
+    `count_from_total`). It was not printed, so the line is reviewed (the unit and the prices are read, the
+    count is not)."""
+    count = count_from_total(parse_money_cents(m.group("total")), parse_money_cents(m.group("unit")))
+    if count is None or count < 2:
+        # Not a whole count (a weight, a price misread beyond one digit): the name and the total are kept.
         left_over = unresolved_line(line)
         left_over.raw_description = description
         left_over.evidence = [description, text]
@@ -318,7 +340,7 @@ def _item_with_lost_count(
     item = build_item(
         description=description,
         total_text=m.group("total"),
-        qty_text=str(total // unit),
+        qty_text=str(count),
         unit_price_text=m.group("unit"),
         tax_code=tax,
         line_conf=line.confidence,
@@ -372,15 +394,6 @@ _MIN_TOLERATED = 6  # letters: a shorter word ("Vale") is too close to others to
 _NEGATIVE_AMOUNT = re.compile(rf"(?:[(-]\s*{MONEY}\s*\)?|{MONEY}\s*-)\s*(?:€|EUR)?$")
 
 
-def _one_letter_apart(a: str, b: str) -> bool:
-    if a == b or abs(len(a) - len(b)) > 1:
-        return False
-    if len(a) == len(b):
-        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
-    short, long = sorted((a, b), key=len)
-    return any(long[:i] + long[i + 1 :] == short for i in range(len(long)))
-
-
 def _with_discount_word(text: str) -> str:
     """ "CESCONTO 0.22-€": the discount word with one letter misread, at the start of a line that ends in a
     negative amount, is the word it was. Without the negative amount nothing changes."""
@@ -390,7 +403,7 @@ def _with_discount_word(text: str) -> str:
     key = normalize_key(word)
     if len(key) < _MIN_TOLERATED:
         return text
-    known = next((w for w in _DISCOUNT_WORDS if _one_letter_apart(key, w)), None)
+    known = next((w for w in _DISCOUNT_WORDS if one_letter_apart(key, w)), None)
     return f"{_DISCOUNT_WORDS[known]} {rest}" if known else text
 
 
@@ -452,7 +465,7 @@ def _text(line: TextLine) -> str:
 def _orphan_item(description: str, amount: TextLine) -> ParsedLine:
     """A description and a price that the OCR read on two different rows: they belong together (the price
     sits just above or below its name), but the pairing is a guess, so the line is reviewed."""
-    m = _AMOUNT_ONLY.match(_text(amount))
+    m = _AMOUNT_AT_END.search(_text(amount))
     assert m is not None
     item = build_item(
         description=description,
@@ -464,12 +477,13 @@ def _orphan_item(description: str, amount: TextLine) -> ParsedLine:
     return item
 
 
+def _description(m: re.Match[str]) -> str:
+    """The name of an `_ITEM` match, without column titles glued to it or a stray "-" (a misread digit)."""
+    return re.sub(r"^[-–•*.]+\s*", "", _HEADER_NOISE.sub("", m.group("desc")).strip())
+
+
 def _item(m: re.Match[str], line: TextLine, text: str, from_ocr: bool = False) -> ParsedLine:
-    desc = re.sub(
-        r"^[-–•*.]+\s*", "", _HEADER_NOISE.sub("", m.group("desc")).strip()
-    )  # a stray "-" for a misread digit
-    if re.fullmatch(r"PRE[CÇ]O|IVA|VALOR|TOTAL", desc, re.I):  # a column title, the item's name is elsewhere
-        return unresolved_line(line)
+    desc = _description(m)
     if re.search(rf"{MONEY}(?![\dA-Za-z])", desc):
         # An amount inside the name ("PETINGA TOMATE P2 1,70 8 2,00 B"): the OCR joined this row with the
         # next one, whose price is the last amount. Taking it would be a silent guess: leave it to review.

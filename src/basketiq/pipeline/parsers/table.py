@@ -17,7 +17,7 @@ import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal
 
-from basketiq.pipeline.parsers.base import MONEY, build_item, unresolved_line
+from basketiq.pipeline.parsers.base import MONEY, build_item, one_letter_apart, unresolved_line
 from basketiq.pipeline.schema import ParsedLine, TextLine, TextToken
 
 _ROLE_WORDS = {
@@ -35,6 +35,12 @@ _TAX = re.compile(r"[A-Za-z0-9]{1,2}")
 _MONEY = re.compile(MONEY)
 _PRINTED_QTY_CONFIDENCE = 0.5  # a count with only the line total: the unit price is derived, so reviewed
 _MAX_ABBREVIATION_LEN = 3  # letters: "QT", "LI" next to real titles in "ARTIGO/QT/LI"
+# Column titles a photo may misread by one letter ("UALOR"); shorter words are too close to others to forgive.
+_TITLES = (
+    "produtos", "descricao", "designacao", "artigos", "denominacao", "preco", "unitario", "imposto",
+    "quantidade", "total", "valor", "importe",
+)  # fmt: skip
+_MIN_TOLERATED_TITLE = 5
 
 
 @dataclass(frozen=True)
@@ -66,10 +72,15 @@ def _header_roles(line: TextLine) -> list[tuple[str, TextToken]] | None:
     return pairs or None
 
 
+def _misread_title(word: str) -> bool:
+    folded = _fold(word)
+    return len(folded) >= _MIN_TOLERATED_TITLE and any(one_letter_apart(folded, t) for t in _TITLES)
+
+
 def _is_header_word(word: str) -> bool:
     parts = [p for p in word.split("/") if p]
     if len(parts) < 2:
-        return _role(word) is not None or _fold(word) in _FILLER
+        return _role(word) is not None or _fold(word) in _FILLER or _misread_title(word)
     # "ARTIGO/QT/LI": titles joined by slashes. At least two are column titles, the rest short abbreviations.
     roles = [_role(p) for p in parts]
     return sum(r is not None for r in roles) >= 2 and all(

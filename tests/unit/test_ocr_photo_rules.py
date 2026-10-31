@@ -12,8 +12,7 @@ from basketiq.domain.confidence import Thresholds, evaluate
 from basketiq.domain.status import Merchant, ProcessingRoute
 from basketiq.pipeline.orchestrator import view_from_parsed
 from basketiq.pipeline.parsers import parser_for
-from basketiq.pipeline.parsers.base import COUNT_INFERRED_CONFIDENCE
-from basketiq.pipeline.parsers.generic_pt import _one_letter_apart
+from basketiq.pipeline.parsers.base import COUNT_INFERRED_CONFIDENCE, one_letter_apart
 from basketiq.pipeline.parsers.table import first_column_role, is_header_row
 from basketiq.pipeline.schema import ParsedReceipt
 from tests.helpers import doc_from_lines
@@ -38,6 +37,7 @@ def test_a_title_made_of_slash_joined_words_is_a_header() -> None:
     assert first_column_role("IVA ARTIGO/QT/LI PRECO VALOR") == "tax"
     assert first_column_role("DESCRICAO VALOR") == "desc"
     assert not is_header_row("IVA Liquidado")  # the summary that closes the items
+    assert is_header_row("IVA ARTIGO/QT/LI PRECO UALOR")  # a title with one letter misread by the OCR
     assert not is_header_row("ARTIGO/FOO")  # one title and one stranger
 
 
@@ -320,11 +320,11 @@ def test_a_word_near_the_discount_word_is_not_a_discount_without_the_rest(row: s
 @pytest.mark.seen_once  # seen on 1 photo: a discount word with a letter misread
 @pytest.mark.req("F-52")
 def test_one_letter_apart() -> None:
-    assert _one_letter_apart("CESCONTO", "DESCONTO")  # a letter read as another
-    assert _one_letter_apart("DESCONTOS", "DESCONTO")  # a letter more
-    assert _one_letter_apart("ESCONTO", "DESCONTO")  # a letter less
-    assert not _one_letter_apart("DESCONTO", "DESCONTO")  # the exact word needs no help
-    assert not _one_letter_apart("CESCONTA", "DESCONTO")  # two letters
+    assert one_letter_apart("CESCONTO", "DESCONTO")  # a letter read as another
+    assert one_letter_apart("DESCONTOS", "DESCONTO")  # a letter more
+    assert one_letter_apart("ESCONTO", "DESCONTO")  # a letter less
+    assert not one_letter_apart("DESCONTO", "DESCONTO")  # the exact word needs no help
+    assert not one_letter_apart("CESCONTA", "DESCONTO")  # two letters
 
 
 @pytest.mark.seen_once  # seen on 1 photo: the euro sign of "€/kg" read as "e"
