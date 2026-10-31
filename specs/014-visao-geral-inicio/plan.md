@@ -4,13 +4,13 @@
 
 **Input**: Feature specification from `/specs/014-visao-geral-inicio/spec.md`
 
-**Execução sem supervisão:** as marcas `[NEEDS CLARIFICATION]` da spec foram resolvidas em `research.md` com a opção recomendada. Cada uma está marcada **A confirmar (Qn)** e é uma decisão da Liz; nada foi alterado em `spec.md`.
+**Decisões:** as marcas `[NEEDS CLARIFICATION]` da spec foram resolvidas em `research.md` (Q1 a Q11) e confirmadas pela Liz a 2026-10-31; a Q7 mudou (últimas compras também em revisão e em processamento, com `status`). A `spec.md` já as incorpora.
 
 ## Summary
 
 Três acrescentos de leitura à API de análises, sem tabela nova nem migração:
 
-1. **Visão geral do mês** (`GET /v1/analytics/overview?month=YYYY-MM`): gasto, meta e faixa do anel, média mensal e tendência, compras do mês e do anterior, gasto por semana, por mercado e últimas compras. A regra de negócio (percentagem da meta, faixa, média, tendência) vive em **funções puras** testadas primeiro; a consulta lê as compras confirmadas do mês numa só *query* e agrega em Python.
+1. **Visão geral do mês** (`GET /v1/analytics/overview?month=YYYY-MM`): gasto, meta e faixa do anel, média mensal e tendência, compras do mês e do anterior, gasto por semana, por mercado e últimas compras (estas também com as que requerem revisão ou estão em processamento). A regra de negócio (percentagem da meta, faixa, média, tendência) vive em **funções puras** testadas primeiro; a consulta lê as compras confirmadas do mês numa só *query* e agrega em Python.
 2. **Totais por mês** (`GET /v1/analytics/months`): por mês, número de compras confirmadas e total em cêntimos. Serve a lista de Talões e a média da visão geral (mesma função).
 3. **Produtos enriquecidos** (`GET /v1/products`): cada item ganha preço médio ponderado com a sua base, número de compras e de mercados, com o mesmo cálculo do detalhe do produto (função partilhada, números iguais).
 
@@ -49,10 +49,10 @@ Contrato primeiro: depois de implementar regenera-se `openapi.json` e o frontend
 | III. Nunca inventar valores | Passa: sem meta → `goal_*` nulos e `band = none`; abaixo do mínimo de meses → média e tendência nulas; produto sem peso/volume → sem preço por kg/l (§12.4); mês vazio não conta como zero na média |
 | IV. Privacidade por omissão | Passa: todas as consultas por `user_id` (outro utilizador nunca vê, PT-AC-9, SEC-authz); `ConsentedUser` em todas as rotas; logs e métricas sem valores (teste SEC-logs) |
 | V. Mobile-first e acessível | N/A (API); o texto («Tranquilo», saldo) é do frontend; a API devolve números e faixa, nunca linguagem de perda |
-| VI. Rastreabilidade | Passa com decisão pendente (Q10): ids F-176 a F-182 da faixa reservada à continuação da experiência v2, porque F-119 a F-125 não chegam; exige subir `F_MAX` em `scripts/traceability.py` (tarefa) |
+| VI. Rastreabilidade | Passa (Q10 confirmada): ids F-176 a F-182 da faixa reservada à continuação da experiência v2, porque F-119 a F-125 não chegam; exige subir `F_MAX` em `scripts/traceability.py` (tarefa) |
 | VII. Simplicidade | Passa: funções puras pequenas, uma consulta por conceito, sem tabela nem cache; a tendência «na média» é o único campo acrescentado à spec (Q4) |
 
-Resultado: **sem violações**. Riscos: Q10 (ids) e Q1 (base do gasto).
+Resultado: **sem violações**. Risco aceite: Q1 (o gasto do Início pode diferir em cêntimos do Resumo até à Fase 4).
 
 Reavaliado após o desenho: sem alterações.
 

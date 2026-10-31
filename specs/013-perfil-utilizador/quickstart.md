@@ -48,4 +48,4 @@ Depois, no frontend: `corepack pnpm@9 gen:api` (spec 009, T023 remove o tipo loc
 | 8 | `GET /v1/config` | inclui `smart_list_enabled: false` |
 | 9 | Eliminar a conta | o perfil desaparece com ela |
 
-Aplicar as duas migrações à base de desenvolvimento (`alembic upgrade head` pelo serviço `migrate`) é um passo manual da Liz, fora desta spec e só depois de o frontend 014 (Perfil) estar pronto.
+A `e5a8b3d1f2c7` já está aplicada à base de desenvolvimento. Aplicar a `f6b9c4e2a3d8` (`alembic upgrade head` pelo serviço `migrate`) é um passo manual da Liz, fora desta spec e só depois de o frontend 014 (Perfil) estar pronto.

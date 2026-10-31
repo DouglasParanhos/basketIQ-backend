@@ -106,7 +106,7 @@ description: "Tarefas da spec 013: perfil, mercados e originais em bloco"
 - [x] T029 Confirmar que o golden sintético (`--baseline tests/golden/baseline.json`) não mudou (esta spec não toca no *parser*)
 - [x] T030 Atualizar o `README.md` do backend (secção de endpoints, se existir tabela) com perfil, mercados e originais em bloco
 - [x] T031 Correr `/simplify` e repetir T028; mostrar o `git diff --stat`
-- [ ] T032 (manual, Liz, **depois de rever e só com o frontend 014 (Perfil) pronto**) Reconstruir a imagem, aplicar as duas migrações `e5a8b3d1f2c7` (tabela) e `f6b9c4e2a3d8` (contas existentes ficam concluídas) à base de desenvolvimento com o serviço `migrate` e recriar os contentores; sem isto, a API nova falha contra a base antiga. Não há forma provisória de definir a meta: as contas marcadas só a definem no Perfil
+- [ ] T032 (manual, Liz, **depois de rever e só com o frontend 014 (Perfil) pronto**) Reconstruir a imagem, aplicar a `f6b9c4e2a3d8` (contas existentes ficam concluídas; a `e5a8b3d1f2c7`, da tabela, já está aplicada) à base de desenvolvimento com o serviço `migrate` e recriar os contentores; sem isto, a API nova falha contra a base antiga. Não há forma provisória de definir a meta: as contas marcadas só a definem no Perfil
 - [ ] T033 (lançamento, Liz) Subir `PRIVACY_POLICY_VERSION` em `src/basketiq/services/accounts.py` e publicar o texto novo da política (redigido pela Liz) **antes** de ativar a recolha do perfil; quando subir, todas as contas ficam bloqueadas em compras e análises até consentirem de novo
 
 ---

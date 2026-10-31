@@ -196,6 +196,6 @@ O frontend decide mostrar o destino **Lista** a partir da configuração públic
 ## Assumptions
 
 - Dependência: a migração de `user_profiles` e a regeneração do `openapi.json` seguem o fluxo «contrato primeiro» do plano.
-- **Duas migrações:** `e5a8b3d1f2c7` cria a tabela e `f6b9c4e2a3d8` (dados) marca as contas existentes como concluídas. Aplicam-se juntas, só quando o frontend 014 (Perfil) estiver pronto: quem fica marcado sem meta só a define no Perfil e não há forma provisória de a definir (decisão da Liz, 2026-10-31).
+- **Duas migrações:** `e5a8b3d1f2c7` cria a tabela e `f6b9c4e2a3d8` (dados) marca as contas existentes como concluídas. A primeira já está aplicada à base de desenvolvimento; só falta a segunda, que se aplica apenas quando o frontend 014 (Perfil) estiver pronto: quem fica marcado sem meta só a define no Perfil e não há forma provisória de a definir (decisão da Liz, 2026-10-31).
 - **Lançamento (fora desta spec):** subir `PRIVACY_POLICY_VERSION` e publicar o texto novo da política, redigido pela Liz, antes de ativar a recolha do perfil (tarefa T033). Até lá a versão atual é a aceite por todos e o cenário US5 só se exercita nos testes.
 - A spec 010 está reservada ao passo C (grupos de produto). Ao criar essa spec com o `create-new-feature.sh`, usar `--number 10`; sem isso o spec-kit atribui o número seguinte ao maior existente.

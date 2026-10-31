@@ -6,7 +6,8 @@
 
 | Origem | Campos usados | Para quê |
 |---|---|---|
-| `receipts` | `user_id`, `processing_status = CONFIRMED`, `purchase_at`, `merchant`, `merchant_name`, `total_cents` | gasto, contagens, semanas, mercados, últimas compras, totais por mês |
+| `receipts` | `user_id`, `processing_status = CONFIRMED`, `purchase_at`, `merchant`, `merchant_name`, `total_cents` | gasto, contagens, semanas, mercados, totais por mês |
+| `receipts` (sem filtrar a confirmadas) | `processing_status` em `CONFIRMED`, `REVIEW_REQUIRED`, `COMPLETED`, `RECEIVED`, `VALIDATING`, `EXTRACTING`; `purchase_at` ou `created_at` | só as últimas 5 compras (R9) |
 | `receipt_lines` | `receipt_id`, `line_total_cents`, `discount_cents` (e, nos produtos, `quantity_decimal`, `unit`, `unit_price_cents`, `normalized_product_id`) | gasto de uma compra sem `total_cents`; preço médio dos produtos |
 | `user_profiles` (spec 013) | `monthly_goal_cents` | meta; sem linha ou nula → sem meta |
 | `products` | `canonical_name`, `unit_type` | lista de produtos |

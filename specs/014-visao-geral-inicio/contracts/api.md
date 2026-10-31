@@ -1,6 +1,6 @@
 # Contrato da API (spec 014)
 
-Convenções do repositório: JSON, erros `{code, message, request_id, field_errors?}`, sessão por cookie. «Consentido» = `ConsentedUser`. Todos os valores monetários são **cêntimos inteiros**; todas as percentagens são **inteiros** (arredondados ao inteiro, meio para cima). Só entram compras confirmadas do próprio utilizador. Os mesmos nomes de campo são os da spec 014 (Fase 0); o que esta spec acrescenta está marcado **novo**.
+Convenções do repositório: JSON, erros `{code, message, request_id, field_errors?}`, sessão por cookie. «Consentido» = `ConsentedUser`. Todos os valores monetários são **cêntimos inteiros**; todas as percentagens são **inteiros** (arredondados ao inteiro, meio para cima). Gasto, média, semanas, mercados e contagens só com compras confirmadas do próprio utilizador; `recent_receipts` também traz as que requerem revisão ou estão em processamento (Q7). Os mesmos nomes de campo são os da spec 014 (Fase 0); o que esta spec acrescenta está marcado **novo**.
 
 ## Endpoints
 
@@ -31,13 +31,13 @@ OverviewOut {
   purchases_last_month: int
   weeks: list[WeekOut]
   by_merchant: list[MerchantShareOut]      # gasto decrescente
-  recent_receipts: list[RecentReceiptOut]  # até 5, da mais recente
+  recent_receipts: list[RecentReceiptOut]  # até 5 do mês, da mais recente; confirmadas, em revisão e em processamento
   empty: bool                              # true = a conta não tem nenhuma compra confirmada, em qualquer mês
 }
 
 WeekOut          { index: int, from: date, to: date, spent_cents: int }   # index 1..5; blocos de 7 dias desde o dia 1; soma = spent_cents
 MerchantShareOut { merchant: str | null, name: str, spent_cents: int, purchases: int, share_pct: int }   # share_pct soma 100; merchant nulo = loja sem leitor próprio
-RecentReceiptOut { id: uuid, merchant: str | null, name: str, date: date, total_cents: int | null }
+RecentReceiptOut { id: uuid, merchant: str | null, name: str, date: date, total_cents: int | null, status: ReceiptStatus }   # status: CONFIRMED | REVIEW_REQUIRED | COMPLETED | RECEIVED | VALIDATING | EXTRACTING (nunca os de erro); date = purchase_at, ou created_at se a leitura ainda não a trouxe
 
 MonthTotalOut    { month: "YYYY-MM", confirmed_count: int, total_cents: int }
 
@@ -53,7 +53,7 @@ ProductSearchItem {                        # campos atuais mantêm-se (id, name,
 
 1. `month` com formato diferente de `YYYY-MM` ou mês fora de 01 a 12 → 422 `validation_error` com `field_errors` no campo `month`. Mês futuro → 200 com zeros.
 2. Mês de Lisboa: uma compra às 00:30 de 1 de novembro conta só em novembro (F-18). Os totais por mês usam a mesma definição.
-3. Gasto de uma compra: `total_cents`, ou a soma líquida das linhas se o total faltar. Compras por confirmar ou em revisão nunca entram.
+3. Gasto de uma compra: `total_cents`, ou a soma líquida das linhas se o total faltar. Compras por confirmar ou em revisão nunca entram no gasto, na média, nas semanas, nos mercados nem nas contagens; só em `recent_receipts`, com o seu `status`.
 4. Sem meta: `goal_cents = goal_pct = null`, `band = "none"`, `spent_cents` na mesma.
 5. Fronteiras (meta de 40 000): gasto 20 000 → 50/`ok`; 20 160 → 50/`ok`; 20 200 → 51/`attention`; 30 000 → 75/`attention`; 30 160 → 75/`attention`; 30 200 → 76/`high`.
 6. Média e tendência: ver `research.md` R4 e R5. Sem média: `monthly_average_cents`, `recent_vs_average_pct` e `average_trend` nulos.
@@ -62,7 +62,7 @@ ProductSearchItem {                        # campos atuais mantêm-se (id, name,
 
 ## Respostas às perguntas do frontend 011 (C1 a C9)
 
-O ficheiro `contracts/overview-api.md` do frontend 011, que devia listar C1 a C10, não existe; as perguntas foram recolhidas de `plan.md`, `research.md`, `data-model.md` e `spec.md` desse frontend e **C10 não foi encontrada**.
+O ficheiro `contracts/overview-api.md` do frontend 011, que devia listar C1 a C10, não existe; as perguntas foram recolhidas de `plan.md`, `research.md`, `data-model.md` e `spec.md` desse frontend e **C10 não foi encontrada** (pendente do frontend).
 
 | Pergunta | Resposta |
 |---|---|
@@ -72,6 +72,6 @@ O ficheiro `contracts/overview-api.md` do frontend 011, que devia listar C1 a C1
 | C4 saldo da meta | não vem na API: `goal_cents − spent_cents` no cliente |
 | C5 forma de `weeks[]` | `WeekOut` |
 | C6 forma de `by_merchant[]` | `MerchantShareOut` |
-| C7 forma de `recent_receipts[]` | `RecentReceiptOut`; só confirmadas, sem estado (Q7) |
+| C7 forma de `recent_receipts[]` | `RecentReceiptOut` com `status`; inclui as que requerem revisão ou estão em processamento (Q7) |
 | C8 meta de meses passados | a meta atual, sempre |
 | C9 `month` explícito | aceite; a omissão usa o mês corrente de Lisboa |

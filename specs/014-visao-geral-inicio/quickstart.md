@@ -40,5 +40,6 @@ Semear uma conta sintética com 5 000 linhas e medir `overview` (`scripts/seed_p
 | 4 | `?month=2026-13` e `?month=abc` | 422 com `field_errors` em `month` |
 | 5 | Compras em 3 meses completos anteriores | `monthly_average_cents` preenchido; com 2 meses a tendência é nula |
 | 6 | `GET /v1/analytics/months` | meses com compras confirmadas, do mais recente |
+| 6b | Uma compra em revisão e uma em processamento no mês | aparecem em `recent_receipts` com `status`; o gasto não muda |
 | 7 | `GET /v1/products` | cada item com `avg_price_cents`, `price_basis`, `purchases`, `merchants` |
 | 8 | Utilizador B pede os mesmos endpoints | só vê os seus dados |
