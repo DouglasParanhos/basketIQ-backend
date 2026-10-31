@@ -2,7 +2,8 @@
 
 A synthetic receipt of every merchant is rendered like a thermal receipt (descriptions on the left,
 amounts right-aligned), distorted like a hand-held photo and read with the local OCR. Needs the
-PaddleOCR models (marker `ocr`, like the other OCR cases); 16 reads, so it adds about a minute.
+PaddleOCR models (marker `ocr`, like the other OCR cases); 28 reads, so it adds about two minutes. Turned,
+upside down and at an angle they lie on a dark table, as a receipt photographed on white is not cut out.
 """
 
 from __future__ import annotations
@@ -14,11 +15,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 from basketiq.eval.golden import run
 from basketiq.pipeline.ocr import OcrEngine
 from basketiq.pipeline.pdf_text import extract_pdf_text
+from tests.helpers import photo_like, seen_at_an_angle
 
 SYNTHETIC = Path(__file__).resolve().parent / "synthetic"
 MERCHANT_CASES = ["pingo_doce_text", "lidl_text", "continente_text", "auchan_text"]
@@ -63,11 +65,25 @@ def curled(top_slope: float, bottom_slope: float) -> Distortion:
     return apply
 
 
-def photo_like(img: Image.Image) -> Image.Image:
-    """Mild blur and sensor noise (seeded, so the photos are identical on every run)."""
-    blurred = img.filter(ImageFilter.GaussianBlur(0.8))
-    noise = np.random.default_rng(42).normal(0, 6, (blurred.height, blurred.width, 1))
-    return Image.fromarray(np.clip(np.asarray(blurred) + noise, 0, 255).astype(np.uint8))
+TABLE = (40, 36, 34)
+
+
+def on_table(img: Image.Image) -> Image.Image:
+    """The receipt lying on a dark table, with room around it to be turned."""
+    margin = img.height // 4
+    photo = Image.new("RGB", (img.width + 2 * margin, img.height + 2 * margin), TABLE)
+    photo.paste(img, (margin, margin))
+    return photo
+
+
+def turned(degrees: float) -> Distortion:
+    return lambda img: on_table(img).rotate(degrees, fillcolor=TABLE, resample=Image.Resampling.BICUBIC)
+
+
+def at_an_angle(img: Image.Image) -> Image.Image:
+    """Taken from below at an angle: the far end narrower than the near one."""
+    photo = on_table(img)
+    return seen_at_an_angle(photo, 0.12 * photo.width, TABLE)
 
 
 DISTORTIONS: dict[str, Distortion] = {
@@ -75,6 +91,9 @@ DISTORTIONS: dict[str, Distortion] = {
     "rotated_left": rotated(2.0),
     "rotated_right": rotated(-3.0),
     "curled": curled(-0.05, 0.04),
+    "turned_15": turned(15),
+    "upside_down": turned(180),
+    "at_an_angle": at_an_angle,
 }
 
 

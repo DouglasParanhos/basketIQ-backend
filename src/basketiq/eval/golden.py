@@ -311,6 +311,8 @@ def evaluate_case(
         else:
             s.corrections += 1
             fail(f"total {parsed.total_cents if parsed else None} != {exp['total_cents']}")
+    if missing := set(exp.get("quality_warnings", [])) - set(out.quality_warnings):
+        fail(f"quality warnings missing {sorted(missing)}")
     if exp.get("review_codes") is not None and not unseen:
         s.review_flag_checked += 1
         codes = {r.code for r in out.evaluation.reasons} if out.evaluation else set()

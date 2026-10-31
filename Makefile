@@ -3,7 +3,7 @@
 export UV_PROJECT_ENVIRONMENT ?= $(HOME)/.venvs/basketiq
 RUN = uv run --frozen
 
-.PHONY: install up up-llm down logs migrate test test-all lint typecheck security golden golden-real golden-unseen golden-unseen-qr traceability openapi fixtures seed-perf bench
+.PHONY: install up up-llm down logs migrate test test-all lint typecheck security golden golden-real golden-real-variants golden-unseen golden-unseen-qr traceability openapi fixtures seed-perf bench
 
 install:            ## install all dependencies (OCR + LLM extras, dev tools)
 	uv sync --frozen --all-extras
@@ -47,7 +47,10 @@ golden:             ## synthetic golden set against the committed baseline
 	$(RUN) python -m basketiq.eval.golden --dir tests/golden/synthetic --ocr --baseline tests/golden/baseline_ocr.json
 
 golden-real:        ## real receipts (kept outside git): make golden-real GOLDEN_REAL_DIR=../Receipts
-	GOLDEN_REAL_DIR=$(GOLDEN_REAL_DIR) $(RUN) pytest -m golden_real tests/golden
+	GOLDEN_REAL_DIR=$(GOLDEN_REAL_DIR) $(RUN) pytest -m golden_real tests/golden --ignore=tests/golden/test_real_variants.py
+
+golden-real-variants: ## the real receipts at an angle, sideways, far, as photo/PDF (K=<variant> runs one)
+	GOLDEN_REAL_DIR=$(GOLDEN_REAL_DIR) $(RUN) pytest -m golden_real tests/golden/test_real_variants.py $(if $(K),-k "$(K)")
 
 golden-unseen: GOLDEN_REAL_DIR ?= ../Receipts
 golden-unseen:      ## real receipts read as if no shop had a parser (generic parser, no QR); add --force-unknown by hand

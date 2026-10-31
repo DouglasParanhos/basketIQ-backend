@@ -116,7 +116,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.paddlex
-          key: paddlex-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          key: paddlex-${{ runner.os }}-${{ hashFiles('uv.lock') }}-doc-ori  # + the page-orientation model
       - name: OCR golden cases against the OCR baseline
         run: |
           uv run pytest -m ocr tests/golden
