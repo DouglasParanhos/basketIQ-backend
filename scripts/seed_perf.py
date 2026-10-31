@@ -1,4 +1,4 @@
-"""Seed an account with N confirmed receipt lines and benchmark the dashboard (spec técnica §9).
+"""Seed an account with N confirmed receipt lines and benchmark the dashboard, Home and products (§9).
 
     python scripts/seed_perf.py --lines 5000 --bench
     python scripts/seed_perf.py --lines 50000 --bench
@@ -132,6 +132,9 @@ def bench(access_token: str, runs: int = 30) -> None:
         "month": "/v1/analytics/summary?from=2026-03-01&to=2026-03-31",
         "year": "/v1/analytics/summary?from=2025-10-01&to=2026-09-30",
         "year+merchant": "/v1/analytics/summary?from=2025-10-01&to=2026-09-30&merchant=LIDL",
+        "overview": "/v1/analytics/overview?month=2026-03",
+        "months": "/v1/analytics/months",
+        "products": "/v1/products?limit=100",
     }
     for name, url in cases.items():
         timings = []

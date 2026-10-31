@@ -41,6 +41,14 @@ Key decisions (and deviations from the spec, with reasons):
 - **Stored originals (RF-12)**: `GET` and `DELETE /v1/receipts/stored-files` count and delete the original files of
   confirmed receipts, at most 500 receipts a call (`remaining` tells when to repeat). The routes are declared
   before `/{receipt_id}`, a UUID parameter that would otherwise answer 422.
+- **Home overview (RF-15)**: `GET /v1/analytics/overview?month=YYYY-MM` (omitted = the current month in Lisbon)
+  returns the month's spending, the goal percentage and ring band, the monthly average and trend, purchases of
+  the month and the month before, spending by week and by store, and the latest receipts. Spending, average,
+  weeks and stores count confirmed receipts only (a receipt's printed total, or the net of its lines when it has
+  none); the latest receipts also list those to review or being processed, each with its `status`.
+  `GET /v1/analytics/months` gives the confirmed receipts and total per month, newest first. Percentages are whole
+  numbers (half up), money is integer cents. `GET /v1/products` also returns `avg_price_cents` (weighted by
+  quantity), `price_basis`, `purchases` and `merchants` per product, the same numbers as the product detail.
 
 ## Parsers and calibration
 
@@ -154,9 +162,13 @@ Product decisions and feature flags live in one file, the only source of these v
 | `APP_NAME_FOR_CUSTOMER` | `Super Mercado` | Name customers see: login, page title, settings, installed-app name. 1–40 characters. |
 | `LLM_ENABLED` | `false` | Local LLM agent (Agno + Ollama) for receipt lines the parser could not read. |
 | `SMART_LIST_ENABLED` | `false` | Shows the smart shopping list («Lista») in the app. Off until the list is built and approved; the client reads it from `GET /v1/config`. |
+| `GOAL_RING_GREEN_UP_TO_PCT` | `50` | Home goal ring: green up to this whole percentage of the goal, inclusive. `1 ≤ green < orange`. |
+| `GOAL_RING_ORANGE_UP_TO_PCT` | `75` | Orange above green up to this percentage, inclusive; red above. At most `100`. |
+| `AVERAGE_MIN_MONTHS` | `2` | Fewest complete months with confirmed receipts before the Home shows a monthly average (1–12). |
+| `AVERAGE_ON_TARGET_PCT` | `5` | How far (0–50 %) the last two months may be from the average and still count as «on the average». |
 
 - Every key is required and has no default in code. Unknown keys, wrong types (`LLM_ENABLED` and `SMART_LIST_ENABLED` must be
-  real booleans), an empty or over-long name, or a missing file stop the API and the worker at start-up.
+  real booleans, the four percentage and month keys whole numbers within their limits), an empty or over-long name, or a missing file stop the API and the worker at start-up.
 - Changing a value means editing the file and restarting the API and worker. The file is mounted into the
   containers (`./config:/app/config:ro`) and copied into the images.
 - The old `BASKETIQ_LLM_ENABLED` variable is rejected at start-up so it cannot be silently ignored.

@@ -1671,6 +1671,84 @@
         }
       }
     },
+    "/v1/analytics/overview": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Home: goal ring, monthly average, weeks, stores and latest receipts",
+        "operationId": "overview_v1_analytics_overview_get",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-10"
+              ],
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/analytics/months": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Confirmed receipts and total spending per month, newest first",
+        "operationId": "months_v1_analytics_months_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MonthTotalOut"
+                  },
+                  "type": "array",
+                  "title": "Response Months V1 Analytics Months Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/analytics/consumption": {
       "get": {
         "tags": [
@@ -3441,6 +3519,69 @@
         ],
         "title": "MerchantShare"
       },
+      "MerchantShareOut": {
+        "properties": {
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "spent_cents": {
+            "type": "integer",
+            "title": "Spent Cents"
+          },
+          "purchases": {
+            "type": "integer",
+            "title": "Purchases"
+          },
+          "share_pct": {
+            "type": "integer",
+            "title": "Share Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "merchant",
+          "name",
+          "spent_cents",
+          "purchases",
+          "share_pct"
+        ],
+        "title": "MerchantShareOut"
+      },
+      "MonthTotalOut": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "Month"
+          },
+          "confirmed_count": {
+            "type": "integer",
+            "title": "Confirmed Count"
+          },
+          "total_cents": {
+            "type": "integer",
+            "title": "Total Cents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "confirmed_count",
+          "total_cents"
+        ],
+        "title": "MonthTotalOut"
+      },
       "OriginalUrlOut": {
         "properties": {
           "url": {
@@ -3463,6 +3604,149 @@
           "content_type"
         ],
         "title": "OriginalUrlOut"
+      },
+      "OverviewOut": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "Month"
+          },
+          "spent_cents": {
+            "type": "integer",
+            "title": "Spent Cents"
+          },
+          "goal_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Cents"
+          },
+          "goal_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Pct"
+          },
+          "band": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "attention",
+              "high",
+              "none"
+            ],
+            "title": "Band"
+          },
+          "monthly_average_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Average Cents"
+          },
+          "recent_vs_average_pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Vs Average Pct"
+          },
+          "average_trend": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "below",
+                  "on_average",
+                  "above"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Trend"
+          },
+          "average_months": {
+            "type": "integer",
+            "title": "Average Months"
+          },
+          "average_min_months": {
+            "type": "integer",
+            "title": "Average Min Months"
+          },
+          "purchases_this_month": {
+            "type": "integer",
+            "title": "Purchases This Month"
+          },
+          "purchases_last_month": {
+            "type": "integer",
+            "title": "Purchases Last Month"
+          },
+          "weeks": {
+            "items": {
+              "$ref": "#/components/schemas/WeekOut"
+            },
+            "type": "array",
+            "title": "Weeks"
+          },
+          "by_merchant": {
+            "items": {
+              "$ref": "#/components/schemas/MerchantShareOut"
+            },
+            "type": "array",
+            "title": "By Merchant"
+          },
+          "recent_receipts": {
+            "items": {
+              "$ref": "#/components/schemas/RecentReceiptOut"
+            },
+            "type": "array",
+            "title": "Recent Receipts"
+          },
+          "empty": {
+            "type": "boolean",
+            "title": "Empty"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "spent_cents",
+          "goal_cents",
+          "goal_pct",
+          "band",
+          "monthly_average_cents",
+          "recent_vs_average_pct",
+          "average_trend",
+          "average_months",
+          "average_min_months",
+          "purchases_this_month",
+          "purchases_last_month",
+          "weeks",
+          "by_merchant",
+          "recent_receipts",
+          "empty"
+        ],
+        "title": "OverviewOut"
       },
       "PhotoAddIn": {
         "properties": {
@@ -3800,13 +4084,33 @@
           "smart_list_enabled": {
             "type": "boolean",
             "title": "Smart List Enabled"
+          },
+          "goal_ring_green_up_to_pct": {
+            "type": "integer",
+            "title": "Goal Ring Green Up To Pct"
+          },
+          "goal_ring_orange_up_to_pct": {
+            "type": "integer",
+            "title": "Goal Ring Orange Up To Pct"
+          },
+          "average_min_months": {
+            "type": "integer",
+            "title": "Average Min Months"
+          },
+          "average_on_target_pct": {
+            "type": "integer",
+            "title": "Average On Target Pct"
           }
         },
         "type": "object",
         "required": [
           "app_name_for_customer",
           "llm_enabled",
-          "smart_list_enabled"
+          "smart_list_enabled",
+          "goal_ring_green_up_to_pct",
+          "goal_ring_orange_up_to_pct",
+          "average_min_months",
+          "average_on_target_pct"
         ],
         "title": "ProductConfigOut",
         "description": "Read-only view of config/app-config.yaml (one field per key in the file)."
@@ -3939,6 +4243,34 @@
               }
             ],
             "title": "Last Purchase At"
+          },
+          "avg_price_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Price Cents"
+          },
+          "price_basis": {
+            "type": "string",
+            "enum": [
+              "un",
+              "kg",
+              "l"
+            ],
+            "title": "Price Basis"
+          },
+          "purchases": {
+            "type": "integer",
+            "title": "Purchases"
+          },
+          "merchants": {
+            "type": "integer",
+            "title": "Merchants"
           }
         },
         "type": "object",
@@ -3948,7 +4280,11 @@
           "unit_type",
           "lines",
           "spent_cents",
-          "last_purchase_at"
+          "last_purchase_at",
+          "avg_price_cents",
+          "price_basis",
+          "purchases",
+          "merchants"
         ],
         "title": "ProductSearchItem"
       },
@@ -4588,6 +4924,59 @@
         ],
         "title": "ReceiptSummaryOut"
       },
+      "RecentReceiptOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "total_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Cents"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReceiptStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "merchant",
+          "name",
+          "date",
+          "total_cents",
+          "status"
+        ],
+        "title": "RecentReceiptOut"
+      },
       "ReviewReasonOut": {
         "properties": {
           "code": {
@@ -5082,6 +5471,36 @@
           "message"
         ],
         "title": "WarningOut"
+      },
+      "WeekOut": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "spent_cents": {
+            "type": "integer",
+            "title": "Spent Cents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "from",
+          "to",
+          "spent_cents"
+        ],
+        "title": "WeekOut"
       }
     }
   }

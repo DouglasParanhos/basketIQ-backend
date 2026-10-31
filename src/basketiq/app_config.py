@@ -13,7 +13,16 @@ from pathlib import Path
 from typing import Annotated
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PATH = ROOT / "config" / "app-config.yaml"
@@ -35,6 +44,17 @@ class AppConfig(BaseModel):
     ] = Field(alias="APP_NAME_FOR_CUSTOMER")
     llm_enabled: StrictBool = Field(alias="LLM_ENABLED")
     smart_list_enabled: StrictBool = Field(alias="SMART_LIST_ENABLED")
+    # Home ring (RF-15): green up to this percentage of the goal, orange up to the next one, red above.
+    goal_ring_green_up_to_pct: StrictInt = Field(alias="GOAL_RING_GREEN_UP_TO_PCT", ge=1)
+    goal_ring_orange_up_to_pct: StrictInt = Field(alias="GOAL_RING_ORANGE_UP_TO_PCT", le=100)
+    average_min_months: StrictInt = Field(alias="AVERAGE_MIN_MONTHS", ge=1, le=12)
+    average_on_target_pct: StrictInt = Field(alias="AVERAGE_ON_TARGET_PCT", ge=0, le=50)
+
+    @model_validator(mode="after")
+    def _green_below_orange(self) -> AppConfig:
+        if self.goal_ring_green_up_to_pct >= self.goal_ring_orange_up_to_pct:
+            raise ValueError("GOAL_RING_GREEN_UP_TO_PCT: must be lower than GOAL_RING_ORANGE_UP_TO_PCT")
+        return self
 
 
 def config_path() -> Path:

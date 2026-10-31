@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
@@ -432,6 +433,61 @@ class ProductSearchItem(BaseModel):
     lines: int
     spent_cents: int
     last_purchase_at: str | None
+    avg_price_cents: int | None
+    price_basis: Literal["un", "kg", "l"]
+    purchases: int
+    merchants: int
+
+
+class WeekOut(BaseModel):
+    index: int
+    from_: Date = Field(alias="from")
+    to: Date
+    spent_cents: int
+
+    model_config = {"populate_by_name": True, "serialize_by_alias": True}
+
+
+class MerchantShareOut(BaseModel):
+    merchant: str | None
+    name: str
+    spent_cents: int
+    purchases: int
+    share_pct: int
+
+
+class RecentReceiptOut(BaseModel):
+    id: uuid.UUID
+    merchant: str | None
+    name: str
+    date: Date
+    total_cents: int | None
+    status: ReceiptStatus
+
+
+class OverviewOut(BaseModel):
+    month: str
+    spent_cents: int
+    goal_cents: int | None
+    goal_pct: int | None
+    band: Literal["ok", "attention", "high", "none"]
+    monthly_average_cents: int | None
+    recent_vs_average_pct: int | None
+    average_trend: Literal["below", "on_average", "above"] | None
+    average_months: int
+    average_min_months: int
+    purchases_this_month: int
+    purchases_last_month: int
+    weeks: list[WeekOut]
+    by_merchant: list[MerchantShareOut]
+    recent_receipts: list[RecentReceiptOut]
+    empty: bool
+
+
+class MonthTotalOut(BaseModel):
+    month: str
+    confirmed_count: int
+    total_cents: int
 
 
 class ProductInfo(BaseModel):

@@ -3,8 +3,9 @@ from __future__ import annotations
 import hmac
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, Request, Response
 from sqlalchemy.orm import Session
@@ -40,6 +41,14 @@ def get_db() -> Iterator[Session]:
 
 Db = Annotated[Session, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+def get_today(settings: SettingsDep) -> date:
+    """Today's date in the configured timezone (a dependency so tests can fix the day)."""
+    return datetime.now(ZoneInfo(settings.timezone)).date()
+
+
+Today = Annotated[date, Depends(get_today)]
 
 
 def set_session_cookies(response: Response, settings: Settings, tokens: IssuedTokens) -> None:

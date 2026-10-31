@@ -51,7 +51,7 @@ ProductSearchItem {                        # campos atuais mantêm-se (id, name,
 
 ## Regras
 
-1. `month` com formato diferente de `YYYY-MM` ou mês fora de 01 a 12 → 422 `validation_error` com `field_errors` no campo `month`. Mês futuro → 200 com zeros.
+1. `month` com formato diferente de `YYYY-MM`, ano fora de 2000 a 2099 ou mês fora de 01 a 12 → 422 `validation_error` com `field_errors` no campo `month`. Mês futuro → 200 com zeros.
 2. Mês de Lisboa: uma compra às 00:30 de 1 de novembro conta só em novembro (F-18). Os totais por mês usam a mesma definição.
 3. Gasto de uma compra: `total_cents`, ou a soma líquida das linhas se o total faltar. Compras por confirmar ou em revisão nunca entram no gasto, na média, nas semanas, nos mercados nem nas contagens; só em `recent_receipts`, com o seu `status`.
 4. Sem meta: `goal_cents = goal_pct = null`, `band = "none"`, `spent_cents` na mesma.

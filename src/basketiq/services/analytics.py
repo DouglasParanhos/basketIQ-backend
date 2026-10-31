@@ -12,15 +12,26 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, case, func, literal, select
 from sqlalchemy.orm import Session
 
-from basketiq.db.models import Product, Receipt, ReceiptLine
+from basketiq.app_config import AppConfig
+from basketiq.db.models import Product, Receipt, ReceiptLine, UserProfile
 from basketiq.domain.normalization import normalize_key
-from basketiq.domain.status import ReceiptStatus, Unit
+from basketiq.domain.overview import (
+    WEEK_DAYS,
+    average_trend,
+    goal_pct,
+    monthly_average,
+    recent_vs_average,
+    ring_band,
+    shares,
+    week_blocks,
+)
+from basketiq.domain.status import MERCHANT_NAMES, SUPPORTED_MERCHANTS, Merchant, ReceiptStatus, Unit
 
 UNIDENTIFIED = "Produto não identificado"
 
@@ -226,6 +237,39 @@ def _base_price(
     return None, basis
 
 
+def _priced_line(
+    qty: Decimal | None, unit: str | None, unit_price: int | None, total: int | None, discount: int | None
+) -> dict[str, Any]:
+    """One purchase line with its net value and its price in the base unit of the line."""
+    net = int(total or 0) - int(discount or 0)
+    price, basis = _base_price(unit_price, unit, qty, net)
+    return {
+        "quantity": str(qty) if qty is not None else None,
+        "unit": unit,
+        "unit_price_cents": price,
+        "price_basis": basis,
+        "net_cents": net,
+    }
+
+
+def _qty_in_basis(h: dict[str, Any]) -> Decimal:
+    q = Decimal(h["quantity"]) if h["quantity"] else Decimal(0)
+    return q / 1000 if h["unit"] in (Unit.G, Unit.ML) else q
+
+
+def _price_basis(history: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], Decimal]:
+    """The most frequent base unit of the lines, the lines in it and their total quantity."""
+    counter = Counter(h["price_basis"] for h in history)
+    basis = counter.most_common(1)[0][0] if counter else Unit.UNIT
+    same_basis = [h for h in history if h["price_basis"] == basis]
+    return basis, same_basis, sum((_qty_in_basis(h) for h in same_basis), Decimal(0))
+
+
+def _weighted_average(same_basis: list[dict[str, Any]], total_qty: Decimal) -> int | None:
+    """Weighted by quantity: Σ net / Σ quantity, in the stated basis (spec: "base de cálculo")."""
+    return round(Decimal(sum(h["net_cents"] for h in same_basis)) / total_qty) if total_qty else None
+
+
 def product_analytics(
     db: Session, user_id: uuid.UUID, product: Product, f: Filters | None, tz_name: str
 ) -> dict[str, Any]:
@@ -261,35 +305,18 @@ def product_analytics(
             stmt = stmt.where(Receipt.merchant == f.merchant)
     rows = db.execute(stmt).all()
 
-    history: list[dict[str, Any]] = []
-    basis_counter: Counter[str] = Counter()
-    for rid, purchase_at, merchant, qty, unit, unit_price, total, discount, raw in rows:
-        net = int(total or 0) - int(discount or 0)
-        price, basis = _base_price(unit_price, unit, qty, net)
-        basis_counter[basis] += 1
-        history.append(
-            {
-                "receipt_id": str(rid),
-                "date": purchase_at.astimezone(tz).date().isoformat() if purchase_at else None,
-                "merchant": merchant,
-                "quantity": str(qty) if qty is not None else None,
-                "unit": unit,
-                "unit_price_cents": price,
-                "price_basis": basis,
-                "net_cents": net,
-                "raw_description": raw,
-            }
-        )
-    basis = basis_counter.most_common(1)[0][0] if basis_counter else Unit.UNIT
-    same_basis = [h for h in history if h["price_basis"] == basis]
-
-    def qty_in_basis(h: dict[str, Any]) -> Decimal:
-        q = Decimal(h["quantity"]) if h["quantity"] else Decimal(0)
-        return q / 1000 if h["unit"] in (Unit.G, Unit.ML) else q
-
-    total_qty = sum((qty_in_basis(h) for h in same_basis), Decimal(0))
+    history: list[dict[str, Any]] = [
+        {
+            "receipt_id": str(rid),
+            "date": purchase_at.astimezone(tz).date().isoformat() if purchase_at else None,
+            "merchant": merchant,
+            **_priced_line(qty, unit, unit_price, total, discount),
+            "raw_description": raw,
+        }
+        for rid, purchase_at, merchant, qty, unit, unit_price, total, discount, raw in rows
+    ]
+    basis, same_basis, total_qty = _price_basis(history)
     total_spent = sum(h["net_cents"] for h in history)
-    basis_spent = sum(h["net_cents"] for h in same_basis)
     prices = [h["unit_price_cents"] for h in same_basis if h["unit_price_cents"] is not None]
 
     per_merchant: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -297,14 +324,13 @@ def product_analytics(
         per_merchant[h["merchant"] or "UNKNOWN"].append(h)
     comparison = []
     for merchant, items in sorted(per_merchant.items()):
-        q = sum((qty_in_basis(h) for h in items), Decimal(0))
-        s = sum(h["net_cents"] for h in items)
+        q = sum((_qty_in_basis(h) for h in items), Decimal(0))
         ps = [h["unit_price_cents"] for h in items if h["unit_price_cents"] is not None]
         comparison.append(
             {
                 "merchant": merchant,
                 "purchases": len(items),
-                "avg_price_cents": round(Decimal(s) / q) if q else None,
+                "avg_price_cents": _weighted_average(items, q),
                 "min_price_cents": min(ps) if ps else None,
                 "max_price_cents": max(ps) if ps else None,
                 "last_price_cents": items[-1]["unit_price_cents"],
@@ -315,11 +341,10 @@ def product_analytics(
     return {
         "product": {"id": str(product.id), "name": product.canonical_name, "unit_type": product.unit_type},
         "price_basis": basis,
-        "mixed_units": len(basis_counter) > 1,
+        "mixed_units": len({h["price_basis"] for h in history}) > 1,
         "total_quantity": str(total_qty.normalize()) if total_qty else "0",
         "total_spent_cents": total_spent,
-        # Weighted by quantity: Σ net / Σ quantity, in the stated basis (spec: "base de cálculo").
-        "avg_price_cents": round(Decimal(basis_spent) / total_qty) if total_qty else None,
+        "avg_price_cents": _weighted_average(same_basis, total_qty),
         "min_price_cents": min(prices) if prices else None,
         "max_price_cents": max(prices) if prices else None,
         "purchases": len(history),
@@ -418,14 +443,207 @@ def search_products(db: Session, user_id: uuid.UUID, q: str | None, limit: int) 
         # normalize_key keeps only [A-Z0-9 %]; drop "%" so user input cannot inject wildcards.
         term = normalize_key(q).replace("%", "")
         stmt = stmt.where(Product.normalized_key.like(f"%{term}%"))
-    return [
-        {
-            "id": str(r[0]),
-            "name": r[1],
-            "unit_type": r[2],
-            "lines": int(r[3] or 0),
-            "spent_cents": int(r[4] or 0),
-            "last_purchase_at": r[5].isoformat() if r[5] else None,
-        }
-        for r in db.execute(stmt).all()
+    found = db.execute(stmt).all()
+    if not found:
+        return []
+
+    # One query for the lines of the chosen products, priced with the same functions as the detail view.
+    line_rows = db.execute(
+        select(
+            ReceiptLine.normalized_product_id,
+            Receipt.id,
+            Receipt.merchant,
+            ReceiptLine.quantity_decimal,
+            ReceiptLine.unit,
+            ReceiptLine.unit_price_cents,
+            ReceiptLine.line_total_cents,
+            ReceiptLine.discount_cents,
+        )
+        .select_from(ReceiptLine)
+        .join(Receipt, Receipt.id == ReceiptLine.receipt_id)
+        .where(
+            Receipt.user_id == user_id,
+            Receipt.processing_status == ReceiptStatus.CONFIRMED,
+            ReceiptLine.normalized_product_id.in_([r[0] for r in found]),
+            ReceiptLine.line_total_cents.is_not(None),
+        )
+    ).all()
+    lines_of: dict[uuid.UUID, list[dict[str, Any]]] = defaultdict(list)
+    for pid, rid, merchant, qty, unit, unit_price, total, discount in line_rows:
+        lines_of[pid].append(
+            {"receipt_id": rid, "merchant": merchant, **_priced_line(qty, unit, unit_price, total, discount)}
+        )
+
+    items = []
+    for pid, name, unit_type, line_count, spent, last in found:
+        history = lines_of[pid]
+        basis, same_basis, total_qty = _price_basis(history)
+        items.append(
+            {
+                "id": str(pid),
+                "name": name,
+                "unit_type": unit_type,
+                "lines": int(line_count or 0),
+                "spent_cents": int(spent or 0),
+                "last_purchase_at": last.isoformat() if last else None,
+                "avg_price_cents": _weighted_average(same_basis, total_qty),
+                "price_basis": basis,
+                "purchases": len({h["receipt_id"] for h in history}),
+                "merchants": len({h["merchant"] for h in history if h["merchant"] in SUPPORTED_MERCHANTS}),
+            }
+        )
+    return items
+
+
+# ---- Home overview and month totals (RF-15, spec 014) -----------------------------------------------------
+
+# The recent-receipts list also shows what still needs the person's attention; failed receipts stay out.
+RECENT_STATUSES = (
+    ReceiptStatus.CONFIRMED,
+    ReceiptStatus.REVIEW_REQUIRED,
+    ReceiptStatus.COMPLETED,
+    ReceiptStatus.RECEIVED,
+    ReceiptStatus.VALIDATING,
+    ReceiptStatus.EXTRACTING,
+)
+RECENT_LIMIT = 5
+OTHER_MERCHANTS = "Outros"
+
+# What a receipt cost: its printed total or, when it has none, the net of its lines (spec 014 R1).
+_line_net = (
+    select(func.sum(_net))
+    .where(ReceiptLine.receipt_id == Receipt.id, ReceiptLine.line_total_cents.is_not(None))
+    .correlate(Receipt)
+    .scalar_subquery()
+)
+_spend = func.coalesce(Receipt.total_cents, _line_net, 0)
+
+
+class MonthTotal(NamedTuple):
+    month: date  # first day of the month, in local time
+    confirmed_count: int
+    total_cents: int
+
+
+def month_totals(db: Session, user_id: uuid.UUID, tz_name: str) -> list[MonthTotal]:
+    """Confirmed receipts and spending per local month, newest month first; months without any are absent."""
+    month = func.date_trunc("month", func.timezone(tz_name, Receipt.purchase_at))
+    rows = db.execute(
+        select(month, func.count(Receipt.id), func.sum(_spend))
+        .where(
+            Receipt.user_id == user_id,
+            Receipt.processing_status == ReceiptStatus.CONFIRMED,
+            Receipt.purchase_at.is_not(None),
+        )
+        .group_by(month)
+        .order_by(month.desc())
+    ).all()
+    return [MonthTotal(m.date(), int(count), int(total)) for m, count, total in rows]
+
+
+def merchant_label(merchant: str | None, merchant_name: str | None) -> tuple[str | None, str]:
+    """(id, name) of a store: supported merchants by their catalogue name, any other by the name it has."""
+    if merchant in SUPPORTED_MERCHANTS:
+        return merchant, MERCHANT_NAMES[Merchant(merchant)]
+    return None, merchant_name or OTHER_MERCHANTS
+
+
+def overview(
+    db: Session, user_id: uuid.UUID, month: date, today: date, tz_name: str, config: AppConfig
+) -> dict[str, Any]:
+    """The Home screen for `month` (its first day): goal ring, average, weeks, stores and latest receipts."""
+    tz = ZoneInfo(tz_name)
+    blocks = week_blocks(month.year, month.month)
+    start, end = _bounds(Filters(month, blocks[-1][1]), tz)
+    owned = Receipt.user_id == user_id
+
+    spent_rows = db.execute(
+        select(Receipt.purchase_at, Receipt.merchant, Receipt.merchant_name, _spend).where(
+            owned,
+            Receipt.processing_status == ReceiptStatus.CONFIRMED,
+            Receipt.purchase_at >= start,
+            Receipt.purchase_at < end,
+        )
+    ).all()
+    spent = sum(int(cents) for *_, cents in spent_rows)
+
+    weeks = [0] * len(blocks)
+    stores: dict[tuple[str | None, str], list[int]] = {}
+    for purchase_at, merchant, merchant_name, cents in spent_rows:
+        weeks[(purchase_at.astimezone(tz).day - 1) // WEEK_DAYS] += int(cents)
+        count_and_total = stores.setdefault(merchant_label(merchant, merchant_name), [0, 0])
+        count_and_total[0] += 1
+        count_and_total[1] += int(cents)
+    ranked = sorted(stores.items(), key=lambda kv: (-kv[1][1], kv[0][1]))
+    percentages = shares([total for _, (_, total) in ranked])
+    by_merchant = [
+        {"merchant": key[0], "name": key[1], "spent_cents": total, "purchases": count, "share_pct": pct}
+        for (key, (count, total)), pct in zip(ranked, percentages, strict=False)
     ]
+
+    totals = month_totals(db, user_id, tz_name)
+    counts = {t.month: t.confirmed_count for t in totals}
+    complete = [t.total_cents for t in totals if t.month < today.replace(day=1)]
+    average = monthly_average(complete, config.average_min_months)
+    trend = recent_vs_average(complete) if average is not None else None
+
+    profile = db.get(UserProfile, user_id)
+    goal = profile.monthly_goal_cents if profile else None
+    pct = goal_pct(spent, goal) if goal else None
+
+    effective = func.coalesce(Receipt.purchase_at, Receipt.created_at)
+    shown_total = case(
+        (Receipt.processing_status == ReceiptStatus.CONFIRMED, _spend), else_=Receipt.total_cents
+    )
+    recent = db.execute(
+        select(
+            Receipt.id,
+            Receipt.merchant,
+            Receipt.merchant_name,
+            effective,
+            shown_total,
+            Receipt.processing_status,
+        )
+        .where(
+            owned,
+            Receipt.processing_status.in_([s.value for s in RECENT_STATUSES]),
+            effective >= start,
+            effective < end,
+        )
+        .order_by(effective.desc(), Receipt.id.desc())
+        .limit(RECENT_LIMIT)
+    ).all()
+
+    return {
+        "month": f"{month.year:04d}-{month.month:02d}",
+        "spent_cents": spent,
+        "goal_cents": goal,
+        "goal_pct": pct,
+        "band": "none"
+        if pct is None
+        else ring_band(pct, config.goal_ring_green_up_to_pct, config.goal_ring_orange_up_to_pct),
+        "monthly_average_cents": average,
+        "recent_vs_average_pct": trend,
+        "average_trend": average_trend(trend, config.average_on_target_pct),
+        "average_months": len(complete),
+        "average_min_months": config.average_min_months,
+        "purchases_this_month": len(spent_rows),
+        "purchases_last_month": counts.get((month - timedelta(days=1)).replace(day=1), 0),
+        "weeks": [
+            {"index": i, "from": first, "to": last, "spent_cents": cents}
+            for i, ((first, last), cents) in enumerate(zip(blocks, weeks, strict=True), start=1)
+        ],
+        "by_merchant": by_merchant,
+        "recent_receipts": [
+            {
+                "id": rid,
+                "merchant": (label := merchant_label(merchant, merchant_name))[0],
+                "name": label[1],
+                "date": when.astimezone(tz).date(),
+                "total_cents": None if total is None else int(total),
+                "status": status,
+            }
+            for rid, merchant, merchant_name, when, total, status in recent
+        ],
+        "empty": not totals,
+    }

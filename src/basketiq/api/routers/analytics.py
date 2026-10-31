@@ -6,9 +6,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from basketiq.api.deps import ConsentedUser, Db, SettingsDep
+from basketiq.api.deps import ConsentedUser, Db, SettingsDep, Today
 from basketiq.api.errors import ApiError, FieldError
-from basketiq.api.schemas import ConsumptionOut, ProductAnalyticsOut, ProductSearchItem, SummaryOut
+from basketiq.api.routers.config import AppConfigDep
+from basketiq.api.schemas import (
+    ConsumptionOut,
+    MonthTotalOut,
+    OverviewOut,
+    ProductAnalyticsOut,
+    ProductSearchItem,
+    SummaryOut,
+)
 from basketiq.domain.status import Merchant
 from basketiq.observability import metrics
 from basketiq.services import analytics
@@ -17,6 +25,7 @@ from basketiq.services.products import get_visible
 router = APIRouter(prefix="/v1", tags=["analytics"])
 
 MAX_RANGE_DAYS = 3 * 366
+MONTH_PATTERN = r"^20\d{2}-(0[1-9]|1[0-2])$"  # YYYY-MM, years 2000 to 2099
 
 
 def _filters(
@@ -54,6 +63,43 @@ def summary(
     f = _filters(date_from, date_to, merchant, product_id)
     metrics.ANALYTICS_REQUESTS.labels("summary", str(merchant is not None), str(product_id is not None)).inc()
     return SummaryOut.model_validate(analytics.summary(db, user.id, f, settings.timezone))
+
+
+@router.get(
+    "/analytics/overview",
+    response_model=OverviewOut,
+    summary="Home: goal ring, monthly average, weeks, stores and latest receipts",
+)
+def overview(
+    db: Db,
+    settings: SettingsDep,
+    config: AppConfigDep,
+    user: ConsentedUser,
+    today: Today,
+    month: Annotated[str | None, Query(pattern=MONTH_PATTERN, examples=["2026-10"])] = None,
+) -> OverviewOut:
+    first = date.fromisoformat(f"{month}-01") if month else today.replace(day=1)
+    metrics.ANALYTICS_REQUESTS.labels("overview", "False", "False").inc()
+    return OverviewOut.model_validate(
+        analytics.overview(db, user.id, first, today, settings.timezone, config)
+    )
+
+
+@router.get(
+    "/analytics/months",
+    response_model=list[MonthTotalOut],
+    summary="Confirmed receipts and total spending per month, newest first",
+)
+def months(db: Db, settings: SettingsDep, user: ConsentedUser) -> list[MonthTotalOut]:
+    metrics.ANALYTICS_REQUESTS.labels("months", "False", "False").inc()
+    return [
+        MonthTotalOut(
+            month=f"{t.month.year:04d}-{t.month.month:02d}",
+            confirmed_count=t.confirmed_count,
+            total_cents=t.total_cents,
+        )
+        for t in analytics.month_totals(db, user.id, settings.timezone)
+    ]
 
 
 @router.get(

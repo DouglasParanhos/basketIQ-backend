@@ -58,6 +58,10 @@ class ProductConfigOut(BaseModel):
     app_name_for_customer: str
     llm_enabled: bool
     smart_list_enabled: bool
+    goal_ring_green_up_to_pct: int
+    goal_ring_orange_up_to_pct: int
+    average_min_months: int
+    average_on_target_pct: int
 
 
 class MerchantConfigIn(BaseModel):
@@ -123,11 +127,7 @@ def product_metrics(
 
 @router.get("/config", response_model=ProductConfigOut, summary="Values loaded from config/app-config.yaml")
 def product_config(_: AdminUser, config: AppConfigDep) -> ProductConfigOut:
-    return ProductConfigOut(
-        app_name_for_customer=config.app_name_for_customer,
-        llm_enabled=config.llm_enabled,
-        smart_list_enabled=config.smart_list_enabled,
-    )
+    return ProductConfigOut(**config.model_dump())
 
 
 @router.get("/merchants", response_model=list[MerchantConfigOut])

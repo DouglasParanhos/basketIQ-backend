@@ -27,9 +27,10 @@ DELEGATION = re.compile(r"\*\*Verificado no Frontend\*\*:\s*(.+)")
 
 PLAN_IDS = [f"F-{n:02d}" for n in range(1, 56)] + ["F-03a", "F-15a", "F-15b", "F-22a", "F-22b"]
 
-# Highest F-xx id of any band (end of step D, Funcional §12.4); ids above it are reported as problems.
+# Highest F-xx id of any band (F-176 to F-205: continuation of the v2 experience, Funcional §12.4); ids above
+# it are reported as problems.
 # PLAN_IDS stays narrower on purpose: a band's ids join it once their scenarios are in the test plan.
-F_MAX = 175
+F_MAX = 205
 
 
 def _req_ids(decorator: ast.expr) -> list[str]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -125,6 +126,86 @@ def test_weighed_product_uses_price_per_kg(history: TestClient) -> None:
     assert a["total_quantity"] == "1.52"
     assert a["avg_price_cents"] == 151  # (150 + 80) / 1.52 kg
     assert (a["min_price_cents"], a["max_price_cents"]) == (147, 160)
+
+
+@pytest.mark.req("F-180")
+def test_product_search_items_carry_the_average_price_and_the_counts(history: TestClient) -> None:
+    items = {p["name"]: p for p in history.get("/v1/products").json()}
+    milk, banana = items["LEITE MEIO GORDO"], items["BANANA"]
+    # Weighted by quantity, as in the product detail: (79 + 170 + 75 + 90) / 5 units.
+    assert (milk["avg_price_cents"], milk["price_basis"], milk["purchases"], milk["merchants"]) == (
+        83,
+        "un",
+        4,
+        2,
+    )
+    assert (banana["avg_price_cents"], banana["price_basis"], banana["purchases"], banana["merchants"]) == (
+        151,
+        "kg",
+        2,
+        1,
+    )
+    # The fields that were already there keep their meaning (F-20).
+    assert (milk["lines"], milk["spent_cents"], milk["unit_type"]) == (4, 414, milk["unit_type"])
+    assert milk["last_purchase_at"].startswith("2026-09-30")
+
+
+@pytest.mark.req("F-180")
+def test_product_search_and_product_detail_give_the_same_numbers(history: TestClient) -> None:
+    for item in history.get("/v1/products").json():
+        detail = history.get(f"/v1/products/{item['id']}/analytics").json()
+        assert item["avg_price_cents"] == detail["avg_price_cents"], item["name"]
+        assert item["price_basis"] == detail["price_basis"], item["name"]
+        assert item["purchases"] == detail["purchases"], item["name"]
+        assert item["merchants"] == len(
+            {m["merchant"] for m in detail["by_merchant"] if m["merchant"] != "UNKNOWN"}
+        )
+
+
+@pytest.mark.req("F-180")
+def test_a_product_without_a_quantity_has_no_average_price_and_no_price_per_kg(
+    history: TestClient, db: Any
+) -> None:
+    from sqlalchemy import select
+
+    from basketiq.db.models import Product, Receipt, ReceiptLine, User
+    from basketiq.domain.status import ReceiptStatus
+
+    owner = db.scalars(select(User)).one()
+    product = Product(
+        canonical_name="SEM QUANTIDADE", normalized_key="SEM QUANTIDADE", owner_user_id=owner.id
+    )
+    receipt = Receipt(
+        user_id=owner.id,
+        merchant="UNKNOWN",
+        purchase_at=datetime(2026, 9, 3, 12, 0, tzinfo=UTC),
+        source_type="image",
+        content_type="image/png",
+        size_bytes=1,
+        object_key="originals/x/y",
+        processing_status=ReceiptStatus.CONFIRMED,
+    )
+    db.add_all([product, receipt])
+    db.flush()
+    db.add(
+        ReceiptLine(
+            receipt_id=receipt.id,
+            line_number=1,
+            raw_description="SEM QUANTIDADE",
+            normalized_product_id=product.id,
+            line_total_cents=250,
+        )
+    )
+    db.commit()
+    item = next(
+        p for p in history.get("/v1/products?q=sem quantidade").json() if p["name"] == "SEM QUANTIDADE"
+    )
+    assert (item["avg_price_cents"], item["price_basis"], item["purchases"], item["merchants"]) == (
+        None,
+        "un",
+        1,
+        0,  # a store without a reader of its own is not counted as a merchant
+    )
 
 
 @pytest.mark.req("RF-09")

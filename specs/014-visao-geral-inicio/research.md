@@ -63,6 +63,14 @@ Verificado a 2026-10-31 no código do backend (`services/analytics.py`, `api/rou
 
 **R13. Desempenho.**
 - Decisão: `overview` faz no máximo 5 consultas pequenas: compras confirmadas do mês (linhas da lista, não das compras com linhas), contagem do mês anterior, totais por mês (média), existência de qualquer compra confirmada e meta do perfil. O subselect das linhas só corre para compras sem `total_cents`. Sem cache nem índice novo (`ix_receipts_user_purchase`). Medição: p95 < 2 s com 5 000 linhas e registo com 50 000 (US6.3, US6.4).
+- **Medido a 2026-10-31** (`scripts/seed_perf.py --lines N --bench`, em contentor, numa base descartável, dados sintéticos, 30 pedidos por caso, sem rede):
+
+  | Linhas | `overview` p50 / p95 | `months` p50 / p95 | `products?limit=100` p50 / p95 |
+  |---|---|---|---|
+  | 5 000 (347 compras) | 28 / 31 ms | 20 / 24 ms | 67 / 101 ms |
+  | 50 000 (3 370 compras) | 34 / 62 ms | 25 / 28 ms | 342 / 457 ms |
+
+  `overview` fica muito abaixo de 2 s. Os produtos crescem com as linhas (uma consulta das linhas dos 100 produtos escolhidos), sem consulta por produto.
 
 **R14. Privacidade e métricas.**
 - Decisão: `ConsentedUser` nas três rotas; todas as consultas por `user_id`; `metrics.ANALYTICS_REQUESTS.labels("overview", "False", "False")` e `("months", …)` como as rotas atuais (as etiquetas são booleanas, sem valores); teste de privacidade (SEC-logs) com um mês de compras: nenhum valor em logs nem em erros.

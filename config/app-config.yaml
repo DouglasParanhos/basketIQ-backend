@@ -19,3 +19,15 @@ LLM_ENABLED: false
 # stays false until it is approved: with false the client hides it. The client reads this value from
 # GET /v1/config. true or false only.
 SMART_LIST_ENABLED: false
+
+# Home goal ring (RF-15). The band is decided on the goal percentage rounded to a whole number (half up),
+# the same number the screen shows: green up to GOAL_RING_GREEN_UP_TO_PCT inclusive, orange above it up to
+# GOAL_RING_ORANGE_UP_TO_PCT inclusive, red above. Whole numbers, 1 <= green < orange <= 100.
+GOAL_RING_GREEN_UP_TO_PCT: 50
+GOAL_RING_ORANGE_UP_TO_PCT: 75
+
+# Monthly average (RF-15): the fewest complete months with confirmed receipts before an average is shown
+# (1 to 12), and how far, in percent (0 to 50), the last two months may be from the average and still be
+# reported as «on the average».
+AVERAGE_MIN_MONTHS: 2
+AVERAGE_ON_TARGET_PCT: 5
