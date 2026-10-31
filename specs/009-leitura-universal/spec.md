@@ -353,6 +353,9 @@ relatório do fluxo. Alimentam os fluxos indicados.
   ("0,513 X 6,19"), enquanto as unidades vêm sem decimais ("3 X 5,99"). O parser lê kg por convenção do
   formato e não distingue sozinho. A resolver depois (preço plausível por kg, dicionário de produtos ou
   pergunta ao utilizador). O gabarito mantém 4 unidades. Não se corrige no A0.
+  **Atualização (2026-10-31):** um valor inteiro com três decimais e sem "kg" impresso passa a ler-se como
+  unidades (uma balança pára num quilo exato cerca de uma vez em mil pesagens); o alerta de unidade (D1b)
+  mantém-se e a linha continua a ir para revisão.
 - **Tempo (A7)**: cada foto demorou entre 39 s e 71 s (média 54,5 s, máximo 71,4 s no `--unseen`; média
   54,1 s, máximo 68,2 s no modo normal), medido em Docker Desktop no Windows (16 CPUs, 8 GB), com os
   contentores do projeto parados e mais nada a correr: não é a máquina-alvo de 4 vCPU. Os PDF com texto

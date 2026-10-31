@@ -64,6 +64,20 @@ Sem ambiguidades, não há chamada de LLM nem de serviço externo.
 5b. **Given** uma foto inclinada ou com o papel curvado, **When** as linhas são reconstruídas, **Then** a
    descrição e o valor da mesma linha ficam juntos e linhas vizinhas não se fundem (ângulo local dado pelo
    OCR). — RF-06 · `tests/unit/test_layout.py`
+5c. **Given** uma foto com a nota rodada (15°), em perspetiva (tirada de lado), deitada (90°, sem EXIF), de
+   pernas para o ar ou de longe, **When** é preparada para o OCR, **Then** o papel é recortado, endireitado
+   (correção de perspetiva) e posto direito (modelo de orientação de página do PaddleOCR) antes da leitura,
+   e lê-se como a foto de frente; sem papel distinguível (mesa branca) é rodada pelo ângulo do texto e
+   cortada à zona do texto. — RF-05 · `tests/unit/test_photo_capture.py`,
+   `tests/golden/test_distorted_photos.py`, `tests/golden/test_real_variants.py` (amostras reais, local)
+5d. **Given** uma nota com poucos pixels (papel com menos de 600 px de largura, p. ex. enviada por uma app de
+   mensagens), **When** é lida, **Then** é lida também a outra escala e a coluna de preços das linhas com
+   nome e sem valor é relida sozinha; um valor relido que já existe na linha vizinha não é tomado. — RF-05 ·
+   `tests/unit/test_photo_capture.py`
+5e. **Given** danos do OCR vistos nas fotos (letra de IVA perdida, lida duas vezes ou mal lida, contagem
+   perdida, um dígito do preço unitário mal lido quando total ÷ contagem o confirma, preço levantado para a
+   linha de cima), **When** a linha é interpretada, **Then** lê-se como impressa e, quando foi deduzida, vai
+   para revisão. — RF-06 · `tests/unit/test_photo_damage_rules.py`
 6. **Given** datas lidas por OCR com erro (mês 18) ou contraditórias, **When** a data é escolhida,
    **Then** datas inválidas são descartadas e a confiança reflete a corroboração; a hora é de
    Lisboa (com mudança de hora). — RF-06, PT-7 ·
@@ -170,8 +184,11 @@ Sem ambiguidades, não há chamada de LLM nem de serviço externo.
 
 ### Measurable Outcomes
 
-- **SC-001**: conjunto dourado — supermercado, data, total, linhas: 100 % nas amostras reais Pingo Doce
-  (2 PDFs) e Lidl (1 screenshot via OCR) e no conjunto sintético.
+- **SC-001**: conjunto dourado — supermercado, data, total, linhas: 100 % nas 12 amostras reais (7
+  supermercados, PDF e foto) e no conjunto sintético; e nas variantes de cada amostra real (fotografada,
+  rodada, em perspetiva, deitada, de pernas para o ar, de longe, sobre mesa branca, com reflexo e dobra, PDF
+  digitalizado e PDF pesquisável):
+  `make golden-real-variants GOLDEN_REAL_DIR=../Receipts`.
 - **SC-002**: 100 % das discrepâncias acima do limiar geram revisão.
 - **SC-003**: processamento de nota comum p95 < 60 s (OCR CPU ≈ 20 s numa imagem de 1600 px).
 
@@ -182,6 +199,14 @@ Sem ambiguidades, não há chamada de LLM nem de serviço externo.
 - [NEEDS CLARIFICATION: calibração dos limiares por campo e supermercado no piloto com amostras reais.]
 - [NEEDS CLARIFICATION: mais amostras reais de Auchan (só há uma foto, com 2 linhas): descontos, produtos
   ao peso e PDF digital ainda não foram vistos.]
-- [NEEDS CLARIFICATION: fotos reais com outras inclinações/curvaturas; a correção de ângulo foi
-  calibrada numa foto e validada com fotos sintéticas deformadas apenas no teste de layout.]
+- Inclinações, perspetiva, orientação e distância: validadas com variantes geradas a partir das amostras
+  reais (5c), incluindo nota sobre mesa branca fotografada em ângulo (rodada pelo ângulo do texto e cortada à
+  zona do texto) e com reflexo de luz e sombra de uma dobra. Texto que um reflexo apaga por completo não se
+  recupera de nenhuma foto: fica para revisão.
+- Fotos com poucos pixels (papel com menos de 600 px, p. ex. enviadas por uma app de mensagens): a foto tal
+  como chegou lê-se por inteiro; rodada, em perspetiva ou reenquadrada perde detalhe e o contrato é
+  supermercado, data e total corretos, aviso `low_resolution` e revisão (decisão de 2026-10-31).
+- PDF com texto de um supermercado de que só há fotos (Aldi, Auchan, Lidl, Mercadona): coberto com um PDF
+  pesquisável no layout do talão (variante `text_pdf`); uma fatura eletrónica com outro layout fica por
+  provar até chegar uma amostra.
 - As linhas Lidl de quantidade/desconto ainda não foram vistas numa nota real e pontuam com fator 0,85.
