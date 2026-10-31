@@ -60,14 +60,29 @@ Key decisions (and deviations from the spec, with reasons):
 | Auchan | `auchan-1.0` | 1 real photo via OCR (100 %: two lines, total, VAT) + synthetic; only the item/quantity/total/VAT shapes of that receipt are calibrated, other priced lines (discounts, weighed items) are kept unresolved |
 | Others | `generic_pt-1.0` | unknown merchants: every field capped at 0.6 → always reviewed |
 
-Photos are straightened before lines are rebuilt: the OCR reports the baseline angle of each text and the
-long ones give the local tilt (a curled receipt tilts one way near the top and the other near the bottom),
-see `pipeline/layout.py`.
-
 Real receipts contain personal data (NIF, card digits) and are **never committed**. Keep them in
 `../Receipts/<Merchant>/` with a `<name>.expected.json` next to each file and run `make golden-real
 GOLDEN_REAL_DIR=../Receipts`. CI uses the synthetic, anonymised set in `tests/golden/synthetic`
 (regenerate with `make fixtures`).
+
+Photos are prepared before the OCR (`pipeline/preprocess.py`, `pipeline/recognition.py`). The paper is cut out
+and its perspective corrected when it lies on a darker surface; otherwise (a white desk, a screenshot) the photo
+is levelled by the angle of its text and cropped to it. PaddleOCR's page-orientation model turns sideways and
+upside-down photos upright. A receipt narrower than 600 px (a photo sent through a messaging app) is read again
+at another scale, and a row with a name but no amount has its price read again on its own. Such a receipt reads
+in full as sent; turned or warped it loses detail to resampling, so it must keep merchant, date and total, carry
+the `low_resolution` warning and go to review. After the OCR, lines are rebuilt following the local tilt the OCR
+reports for each text (a curled receipt tilts one way near the top and the other near the bottom), see
+`pipeline/layout.py`.
+
+`make golden-real-variants GOLDEN_REAL_DIR=../Receipts` checks that this holds for every shop and format. It
+turns each real receipt into the captures nobody sent: a PDF or app screenshot printed and photographed
+(`photographed`); turned 15° (`rotated_15`), at an angle (`perspective`), `sideways`, `upside_down`, from
+further away (`far`); with glare and a fold (`glare_fold`); on a white desk (`white_desk`); inside an image-only
+PDF (`scanned_pdf`); and, for shops with photos only, a searchable PDF in the receipt's own layout
+(`text_pdf`). Each variant is generated into a temporary folder, never committed, and must read like the
+original (spec 003, SC-001). The whole run takes about 20 minutes, about 2 per variant; `K=<variant>` or
+`K="white_desk or text_pdf"` runs a subset (per variant, not per shop).
 
 `make golden-unseen` reads the same real receipts as if no shop had a parser, using the generic parser
 (`--unseen`). `--force-unknown` additionally makes the classifier answer UNKNOWN; today it gives results
