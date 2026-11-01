@@ -51,7 +51,13 @@ from basketiq.pipeline.parsers.base import (
     unresolved_line,
 )
 from basketiq.pipeline.parsers.table import first_column_role, is_header_row, table_items
-from basketiq.pipeline.parsers.totals import choose_total, line_sums, settle_savings
+from basketiq.pipeline.parsers.totals import (
+    LOST_COMMA_BODY,
+    LostComma,
+    choose_total,
+    recover_lost_comma,
+    settle_savings,
+)
 from basketiq.pipeline.schema import AMOUNT_TOKEN, DocumentText, ParsedLine, ParsedReceipt, TextLine
 
 CONFIDENCE_CAP = 0.6
@@ -89,8 +95,10 @@ _DISCOUNT = re.compile(
     rf"(?:[(-]\s*(?P<a1>{MONEY})\s*\)?|(?P<a2>{MONEY})\s*-)\s*(?:€|EUR)?$",
     re.I,
 )
+# An upside-down photo may add a stray character before the euro sign ("A PAGAR 97,37 7 €").
 _TOTAL = re.compile(
-    rf"^(?:TOTAL(?:\s+A\s+PAGAR|\s+COMPRA|\s+PAGO)?(?:\s+[A-Z])?|A\s+PAGAR)\s*:?\s+(?P<amount>{MONEY}){_EURO}$",
+    rf"^(?:TOTAL(?:\s+A\s+PAGAR|\s+COMPRA|\s+PAGO)?(?:\s+[A-Z])?|A\s+PAGAR)\s*:?\s+(?P<amount>{MONEY})"
+    rf"(?:\s+\S(?=\s*(?:€|EUR)))?{_EURO}$",
     re.I,
 )
 _STOP = re.compile(
@@ -106,8 +114,8 @@ _LOST_COUNT = re.compile(rf"^[xX×]\s*(?P<unit>{MONEY}){_EURO}\s+(?P<total>{MONE
 _SAVING_PLAIN = re.compile(rf"^(?:Poupan[çc]a|Desconto)\s+(?P<amount>{MONEY}){_EURO}$", re.I)
 _CATEGORY = re.compile(r"^[A-Za-zÀ-ÿ&/+.' -]+:$")  # "Charcutaria&Queijos:"
 _TAGGED = re.compile(r"^\((?P<tax>[A-Z0-9])\)\s+(?P<desc>.+)$")  # "(A) QUEIJO FRESCO"
-# "BATATA BRANCA 2,5KG 229 E": a price whose comma the OCR lost (see `_recover_lost_comma`)
-_LOST_COMMA = re.compile(rf"^(?P<desc>.*?[A-Za-zÀ-ÿ]{{2}}.*?)\s+(?P<cents>\d{{3,4}}){_EURO}{_TAX}$")
+# "BATATA BRANCA 2,5KG 229 E": a price whose comma the OCR lost (see `totals.recover_lost_comma`)
+_LOST_COMMA = re.compile(rf"^{LOST_COMMA_BODY}{_EURO}{_TAX}$")
 _PRICE_TAIL = rf"(?P<total>{MONEY})(?!\d){_EURO}{_TAX}$"
 _AMOUNT_AT_END = re.compile(_PRICE_TAIL)  # .match: a price alone on its row; .search: a price at its end
 _COLUMN_TITLE = re.compile(r"PRE[CÇ]O|IVA|VALOR|TOTAL", re.I)
@@ -122,7 +130,7 @@ class GenericPtParser:
     geometry = True  # read a searchable PDF's column table by x position, when it has a header
     _from_ocr = False  # set by `parse` for the receipt it reads (a parser instance reads one receipt)
     # set by `parse` too: rows that may be an item whose price lost its comma (position, row, match)
-    _lost_comma: list[tuple[int, TextLine, re.Match[str]]]
+    _lost_comma: list[LostComma]
 
     def __init__(self, merchant: Merchant) -> None:
         self.merchant = merchant
@@ -148,7 +156,7 @@ class GenericPtParser:
             item.field_confidence = {k: round(min(v, self.cap), 3) for k, v in item.field_confidence.items()}
 
         total = choose_total(lines[end:], parsed, self.total)
-        self._recover_lost_comma(parsed, total)
+        recover_lost_comma(parsed, self._lost_comma, total)
         settle_savings(parsed, total)
         purchase_at, date_conf = choose_purchase_datetime(parse_date_candidates(lines))
         return ParsedReceipt(
@@ -177,26 +185,6 @@ class GenericPtParser:
 
     def _store(self, lines: list[TextLine]) -> str | None:
         return terminal_store_label(lines)
-
-    def _recover_lost_comma(self, parsed: list[ParsedLine], total: int | None) -> None:
-        """A row read as a description alone because the OCR lost the comma of its price ("2,5KG 229 E") is
-        the missing item when its number is exactly what the lines lack to reach the printed total, and no
-        other such row would do. A bare number can be part of a name ("500 G"), so the arithmetic decides;
-        the item is reviewed."""
-        if total is None or not self._lost_comma:
-            return
-        gap = total - min(line_sums(parsed), default=0)  # the smaller sum is the one net of the discounts
-        fits = [(at, row, m) for at, row, m in self._lost_comma if int(m.group("cents")) == gap]
-        if len(fits) != 1:
-            return
-        at, row, m = fits[0]
-        item = build_item(
-            description=m.group("desc"),
-            total_text=f"{gap // 100},{gap % 100:02d}",
-            line_conf=min(row.confidence, COUNT_INFERRED_CONFIDENCE),
-            evidence=[_text(row)],
-        )
-        parsed.insert(at, item)
 
     def _items(self, zone: list[TextLine]) -> list[ParsedLine]:
         parsed: list[ParsedLine] = []
@@ -322,7 +310,7 @@ class GenericPtParser:
                 parsed.append(unresolved_line(line))
                 pending_qty = pending_description = pending_tax = None
             elif re.search(r"[A-Za-zÀ-ÿ]{3}", text):  # a description alone
-                if self._from_ocr and (lost := _LOST_COMMA.match(text)):
+                if lost := _LOST_COMMA.match(text):
                     self._lost_comma.append((len(parsed), line, lost))
                 tagged = _TAGGED.match(text)
                 description = re.sub(

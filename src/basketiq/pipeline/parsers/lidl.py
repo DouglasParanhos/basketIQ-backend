@@ -41,9 +41,11 @@ _ITEM = re.compile(rf"{_NAME_AND_PRICE}\s+(?P<tax>[A-F])$")
 # stray character ("3,49 B E"); only a letter A-F is kept. A searchable PDF prints it exactly, so there a
 # missing class means the line is not a Lidl item.
 _PHOTO_ITEM = re.compile(rf"{_NAME_AND_PRICE}(?:\s+(?P<tax>\S))?(?:\s+\S)?$")
+# A photo may leave a stray character before the unit or at the end ("0,318 kg x 19,97 I EUR/kg",
+# "3 x 0,59 S").
 _QTY = re.compile(
-    rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?P<kg>kg)?\s*[xX]\s*(?P<unit>{MONEY})(?:\s*EUR/kg)?"
-    rf"(?:\s+(?P<total>{MONEY})\s+(?P<tax>[A-E]))?$"
+    rf"^(?P<qty>\d+(?:[,.]\d{{1,3}})?)\s*(?P<kg>kg)?\s*[xX]\s*(?P<unit>{MONEY})(?:(?:\s+\S)?\s*EUR/kg)?"
+    rf"(?:\s+(?P<total>{MONEY})\s+(?P<tax>[A-E]))?(?:\s+\S)?$"
 )
 _DISCOUNT = re.compile(
     rf"^(?:Desconto|Poupan|Promo|Lidl\s*Plus).*?-\s*(?P<amount>{MONEY})(?:\s+[A-E])?$",

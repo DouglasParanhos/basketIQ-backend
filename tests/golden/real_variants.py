@@ -2,8 +2,8 @@
 
 Each merchant only has some formats (Aldi/Auchan/Lidl/Mercadona: photos; Continente/Pingo Doce: PDFs), and
 every real photo is a frontal, top-down shot. From each real document this builds:
-  - `photographed`: a page (PDF, app screenshot) printed and photographed on a dark table (the photo route
-    for PDF-only shops);
+  - `photographed`: a page (PDF, app screenshot; the pages of a PDF as one strip) printed and photographed
+    on a dark table (the photo route for PDF-only shops);
   - `rotated_15`, `perspective`, `sideways`, `upside_down`, `far`: that photo (or the real one) taken at an
     angle, sideways or upside down without EXIF, or from further away;
   - `white_desk`: the receipt alone on a white desk, seen at an angle and turned 12 degrees (no dark table
@@ -15,9 +15,10 @@ every real photo is a frontal, top-down shot. From each real document this build
     laid out in the receipt's own columns (an e-invoice that prints like the paper receipt).
 A variant never shrinks the receipt's own pixels. A photo whose receipt is narrower than
 `quality.MIN_PAPER_WIDTH` (one sent through a messaging app) must read right as it came; turned, warped or
-scanned again it loses more detail to resampling, so there the contract is merchant, date and total, the
-`low_resolution` warning on an image, and a review, not every item line. An e-invoice laid out differently
-from the paper receipt stays unproven until a real one arrives (then: add it and calibrate the parser).
+scanned again it loses more detail to resampling, so there the contract is merchant, date and total, a
+review and, on an image clearly under the limit, the `low_resolution` warning; not every item line. An
+e-invoice laid out differently from the paper receipt stays unproven until a real one arrives (then: add it
+and calibrate the parser).
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ from tests.helpers import photo_like, seen_at_an_angle
 
 MAX_PIXELS = 48_000_000  # under validation.MAX_IMAGE_PIXELS
 PRINT_MIN_WIDTH = 800
+WIDTH_NOISE = 0.9  # a variant changes the measured paper width by up to ~5% (seen: 572 -> 602, 586 -> 614)
 TABLE_GREY = 38
 DESK = (228, 223, 216)
 
@@ -113,12 +115,29 @@ _TRANSFORMS: dict[str, Callable[[Image.Image, int], Image.Image]] = {
 VARIANTS = (*_TRANSFORMS, "scanned_pdf", "text_pdf")
 
 
+def _one_strip(pages: list[Image.Image]) -> Image.Image:
+    """The pages of an e-invoice as the one strip of paper the till prints (Lidl puts the time of purchase on
+    page 2): each page's printed rows, one under the other."""
+    if len(pages) == 1:
+        return pages[0]
+    rows = []
+    for page in pages:
+        ink = np.flatnonzero((np.asarray(page.convert("L")) < 200).any(axis=1))
+        rows.append(page.crop((0, ink[0], page.width, ink[-1] + 1)) if ink.size else page)
+    strip = Image.new("RGB", (max(r.width for r in rows), sum(r.height for r in rows) + 40), "white")
+    y = 20
+    for row in rows:
+        strip.paste(row, (0, y))
+        y += row.height
+    return strip
+
+
 def _source(case: Case) -> tuple[Image.Image, bool]:
     """The real document as an image, and whether it is a page (a PDF, an app screenshot) rather than a
     photo with the table around the receipt."""
     data = case.document.read_bytes()
     if case.document.suffix.lower() == ".pdf":
-        return rasterize_pdf(data)[0], True
+        return _one_strip(rasterize_pdf(data)), True
     image = load_image(data)
     return image, crop_to_paper(image).size == image.size
 
@@ -217,10 +236,13 @@ def build(case: Case, variant: str, index: int, engine: OcrEngine) -> tuple[byte
     if variant == "photographed" and not is_page:
         return None
     expected.update(route="LOCAL_OCR", requires_ocr=True)
-    if not is_page and flatten_paper(source).width < MIN_PAPER_WIDTH:
+    if not is_page and (paper_width := flatten_paper(source).width) < MIN_PAPER_WIDTH:
         expected.pop("lines", None)
         expected["status"] = "REVIEW_REQUIRED"
-        if variant != "scanned_pdf":  # the quality checks look at photos, not at the pages of a PDF
+        # Turned or warped, the same receipt measures a few percent wider or narrower (572 px read as 602),
+        # so the warning is only promised for a receipt clearly under the limit. The quality checks look at
+        # photos, not at the pages of a PDF.
+        if paper_width < MIN_PAPER_WIDTH * WIDTH_NOISE and variant != "scanned_pdf":
             expected["quality_warnings"] = ["low_resolution"]
     if variant == "white_desk":
         capture = _on_white_desk(_paper_alone(source, is_page), index)
@@ -238,7 +260,11 @@ def build(case: Case, variant: str, index: int, engine: OcrEngine) -> tuple[byte
 def write_variant(cases: list[Case], variant: str, folder: Path, engine: OcrEngine) -> list[str]:
     """Every real case as `variant`, laid out like GOLDEN_REAL_DIR (`<merchant>/<name>.<ext>` + expected)."""
     written = []
+    # a shop with a real e-invoice needs no text PDF made from a photo's OCR text
+    with_pdf = {c.expected.get("merchant") for c in cases if c.document.suffix.lower() == ".pdf"}
     for index, case in enumerate(cases):
+        if variant == "text_pdf" and case.expected.get("merchant") in with_pdf:
+            continue
         built = build(case, variant, index, engine)
         if built is None:
             continue

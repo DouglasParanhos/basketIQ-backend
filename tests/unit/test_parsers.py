@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from basketiq.domain.status import Merchant, ProcessingRoute
+from basketiq.domain.status import Merchant, ProcessingRoute, Unit
 from basketiq.pipeline.classify import classify
 from basketiq.pipeline.parsers import parser_for
 from basketiq.pipeline.parsers.base import (
@@ -343,6 +343,37 @@ def test_lidl_percent_discount_applies_to_the_previous_item() -> None:
 
 
 @pytest.mark.req("RF-06")
+def test_lidl_quantity_lines_with_a_stray_character() -> None:
+    lines = [
+        "LIDL & Cia",
+        "EUR",
+        "BIFE DA VAZIA DE NOVILHO 6,35 B",
+        "0,318 kg x 19,97 I EUR/kg",
+        "Promoção Lidl Plus -0,79",
+        "SALADA ICEBERGUE 1,77 B",
+        "3 x 0,59 S",
+        "Total 7,33",
+    ]
+    doc = doc_from_lines(lines, route=ProcessingRoute.LOCAL_OCR)
+    beef, salad = parser_for(Merchant.LIDL).parse(doc).lines
+    assert (beef.quantity, beef.unit, beef.unit_price_cents, beef.discount_cents) == (
+        Decimal("0.318"),
+        Unit.KG,
+        1997,
+        79,
+    )
+    assert (salad.quantity, salad.unit, salad.unit_price_cents) == (Decimal("3"), Unit.UNIT, 59)
+
+
+@pytest.mark.req("RF-06")
+def test_total_with_a_stray_character_before_the_euro_sign() -> None:
+    doc = doc_from_lines(
+        ["DENOMINAÇÃO PREÇO IVA", "CENOURA 2KG 1,99 € 1", "A PAGAR 1,99 7 €"], route=ProcessingRoute.LOCAL_OCR
+    )
+    assert parser_for(Merchant.ALDI).parse(doc).total_cents == 199
+
+
+@pytest.mark.req("RF-06")
 def test_pingo_doce_card_balance_is_a_way_of_paying_not_a_discount() -> None:
     lines = [
         "Artigos",
@@ -364,6 +395,28 @@ def test_pingo_doce_card_balance_is_a_way_of_paying_not_a_discount() -> None:
     assert parsed.total_discount_cents == 40
     assert parsed.subtotal_cents is None and parsed.tax_cents is None  # the VAT table covers 1,17 only
     assert parsed.notes == []
+
+
+@pytest.mark.req("RF-06")
+def test_pingo_doce_price_that_lost_its_comma_closes_the_total() -> None:
+    lines = [
+        "Artigos",
+        "PRODUTOS LACTEOS",
+        "C MNT MIMOSA LIGHT250G 234",
+        "BEBIDAS",
+        "D ÁGUA SEM GÁS PD 6L 0,96",
+        "Resumo",
+        "TOTAL 3,30",
+    ]
+    doc = doc_from_lines(lines, route=ProcessingRoute.LOCAL_OCR)
+    butter, water = parser_for(Merchant.PINGO_DOCE).parse(doc).lines
+    assert (butter.raw_description, butter.tax_code, butter.line_total_cents) == (
+        "MNT MIMOSA LIGHT250G",
+        "C",
+        234,
+    )
+    assert butter.field_confidence["line_total"] < 0.8  # reviewed
+    assert water.line_total_cents == 96
 
 
 ALDI_LOST_COMMA = [

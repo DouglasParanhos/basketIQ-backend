@@ -31,7 +31,7 @@ from basketiq.pipeline.parsers.base import (
     parse_tax_table,
     unresolved_line,
 )
-from basketiq.pipeline.parsers.totals import BALANCE
+from basketiq.pipeline.parsers.totals import BALANCE, LOST_COMMA_BODY, LostComma, recover_lost_comma
 from basketiq.pipeline.schema import DocumentText, ParsedLine, ParsedReceipt
 
 _ITEM_BODY = (
@@ -41,6 +41,8 @@ _ITEM = re.compile(rf"^(?P<tax>[A-Z])\s+{_ITEM_BODY}")
 # A photo of the receipt may lose the VAT letter ("QJ HALLOUMI PDIG200G 2,89"); the name then starts with a
 # letter or a digit, so OCR debris ("?? ## 1,20") stays unresolved.
 _PHOTO_ITEM = re.compile(rf"^(?:(?P<tax>[A-Z])\s+)?(?=[^\W_]){_ITEM_BODY}")
+# "C MNT MIMOSA LIGHT250G 234": a price whose comma the OCR lost (see `totals.recover_lost_comma`)
+_LOST_COMMA = re.compile(rf"^(?:(?P<tax>[A-Z])\s+)?{LOST_COMMA_BODY}$")
 # Tolerant to OCR damage seen in practice: "PoupanaImediata(1,40)", "TOTAL POUPANXA (1,40)".
 _DISCOUNT = re.compile(rf"^(?:Poupan|Desconto|Promo|Cup)[^\d()]*\(?\s*-?(?P<amount>{MONEY})\s*\)?$", re.I)
 _TOTAL_GROSS = re.compile(rf"^TOTAL\s+(?P<amount>{MONEY})$")
@@ -62,6 +64,7 @@ class PingoDoceParser:
 
         item_shape = _PHOTO_ITEM if doc.route == ProcessingRoute.LOCAL_OCR else _ITEM
         parsed_lines: list[ParsedLine] = []
+        lost_comma: list[LostComma] = []
         balance = 0
         for line in item_zone:
             text = line.text.strip()
@@ -95,6 +98,8 @@ class PingoDoceParser:
                 continue
             if re.search(rf"{MONEY}\)?$", text):
                 parsed_lines.append(unresolved_line(line))
+            elif lost := _LOST_COMMA.match(text):
+                lost_comma.append((len(parsed_lines), line, lost))
             # Anything else without an amount is a section header (e.g. "TALHO").
 
         gross, _, _ = find_amount(summary, _TOTAL_GROSS)
@@ -107,6 +112,7 @@ class PingoDoceParser:
             total = total + balance if total is not None else None
             savings = savings - balance if savings is not None else None
             subtotal = tax = None
+        recover_lost_comma(parsed_lines, lost_comma, total)
 
         purchase_at, date_conf = choose_purchase_datetime(parse_date_candidates(lines))
         ref = next((m.group("ref") for line in lines if (m := _REF.search(line.text))), None)

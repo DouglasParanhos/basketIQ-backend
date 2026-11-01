@@ -22,7 +22,7 @@ from collections.abc import Iterable
 from decimal import Decimal
 
 from basketiq.domain.money import one_digit_apart, parse_money_cents
-from basketiq.pipeline.parsers.base import COUNT_INFERRED_CONFIDENCE, MONEY
+from basketiq.pipeline.parsers.base import COUNT_INFERRED_CONFIDENCE, MONEY, build_item
 from basketiq.pipeline.schema import ParsedLine, TextLine
 
 _EURO = r"(?:\s*(?:€|EUR))?"
@@ -95,6 +95,33 @@ def line_sums(items: Iterable[ParsedLine]) -> set[int]:
         return set()
     printed = sum(i.line_total_cents or 0 for i in resolved)
     return {printed, printed - sum(i.discount_cents for i in resolved)}
+
+
+# A description and a price whose comma the OCR lost ("BATATA BRANCA 2,5KG 229"); each parser frames it
+LOST_COMMA_BODY = r"(?P<desc>.*?[A-Za-zÀ-ÿ]{2}.*?)\s+(?P<cents>\d{3,4})"
+LostComma = tuple[int, TextLine, re.Match[str]]  # (position in the parsed lines, row, LOST_COMMA_BODY match)
+
+
+def recover_lost_comma(parsed: list[ParsedLine], candidates: list[LostComma], total: int | None) -> None:
+    """A row passed over because the OCR lost the comma of its price ("2,5KG 229 E") is the missing item
+    when its number is exactly what the lines lack to reach the printed total, and no other such row would
+    do. A bare number can be part of a name ("500 G"), so the arithmetic decides; the item is reviewed.
+    A candidate's match may also carry the VAT class (group `tax`)."""
+    if total is None or not candidates:
+        return
+    gap = total - min(line_sums(parsed), default=0)  # the smaller sum is the one net of the discounts
+    fits = [(at, row, m) for at, row, m in candidates if int(m.group("cents")) == gap]
+    if len(fits) != 1:
+        return
+    at, row, m = fits[0]
+    item = build_item(
+        description=m.group("desc"),
+        total_text=f"{gap // 100},{gap % 100:02d}",
+        tax_code=m.groupdict().get("tax"),
+        line_conf=min(row.confidence, COUNT_INFERRED_CONFIDENCE),
+        evidence=[row.text.strip()],
+    )
+    parsed.insert(at, item)
 
 
 def choose_total(
