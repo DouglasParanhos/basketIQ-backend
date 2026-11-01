@@ -16,7 +16,35 @@
 
 **Regra de comparação (D11 e D12, prevalece sobre qualquer outro texto):** janela de 90 dias, só compras confirmadas com tamanho conhecido. Só se diz que um mercado fica «abaixo» ou «acima» do que o utilizador costuma pagar se houver **2 mercados com pelo menos 3 compras cada**, a diferença for pelo menos **15 % da média do grupo do utilizador** e a diferença × a quantidade média por compra for pelo menos **0,20 €**. Caso contrário, «sem diferença clara». Com menos de 3 compras, «faltam X compras para comparar». **Não há ranking global de cadeias.** Os valores 90 dias, 3, 15 % e 0,20 € são as constantes de configuração do passo C, não novas.
 
+**Incremento 1 (2026-11-01):** a US-A constrói-se **antes do passo C**, porque o item da lista é o **artigo**: o mesmo produto na mesma
+cadeia (`Documentation/BRAINSTORM_lista_inteligente_2026-11-01.md`; rascunho do passo C, §7, item 6). Não compara cadeias, não gera
+listas e não usa grupos nem tamanhos. As restantes histórias continuam a depender do passo C.
+
 ## User Scenarios & Testing *(mandatory)*
+
+### User Story A - Artigos comprados na janela (Priority: P1, incremento 1)
+
+`GET /v1/lists/articles`. Cada item é um produto; dentro dele, um artigo por cadeia.
+
+**Acceptance Scenarios**:
+
+1. **Given** compras confirmadas nos últimos `COMPARISON_WINDOW_DAYS` dias (90; o dia de hoje conta), **When** pede, **Then** recebe um
+   item por produto, com um artigo por cadeia; compras por confirmar, fora da janela ou de outro utilizador não entram. — F-147, RF-16
+2. **Given** uma linha com desconto, **When** calcula o preço dessa compra, **Then** usa o valor líquido ÷ a quantidade na base (D10),
+   e o mais baixo e o mais alto dizem se tiveram desconto (`discounted`). — F-148, RF-16, constituição II
+3. **Given** um artigo, **When** devolve, **Then** traz o número de compras, a média ponderada pela quantidade na base do item
+   (`un`, `kg` ou `l`), o mais baixo e o mais alto com a data, e a última compra; as linhas noutra base contam nas compras mas não nos
+   preços, e o item diz `mixed_units`. — F-149, RF-16, constituição II
+4. **Given** um item, **When** devolve, **Then** traz as embalagens (unidades contadas; uma por linha ao peso), as embalagens por mês na
+   janela, o intervalo médio entre dias de compra e o gasto líquido; os itens vêm por gasto, do maior para o menor. — F-150, RF-16
+5. **Given** linhas confirmadas sem produto identificado, **When** devolve, **Then** ficam fora dos itens e só se diz quantas
+   (`excluded_lines`); nenhum valor é estimado. — F-151, constituição III
+6. **Given** a opção da lista desligada, **When** pede, **Then** recebe 404; **Given** a política de privacidade por aceitar, **Then**
+   recebe `privacy_consent_required`. — F-152, RF-16, RF-12
+7. **Given** cadeias não suportadas com nomes diferentes, **When** devolve, **Then** são artigos diferentes, com o nome que têm (ou
+   «Outros» sem nome). — F-147, RF-16
+
+---
 
 ### User Story 0 - Spike de dados antes de construir (Priority: P1, porta de entrada)
 

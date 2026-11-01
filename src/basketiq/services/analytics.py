@@ -265,8 +265,9 @@ def _price_basis(history: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any
     return basis, same_basis, sum((_qty_in_basis(h) for h in same_basis), Decimal(0))
 
 
-def _weighted_average(same_basis: list[dict[str, Any]], total_qty: Decimal) -> int | None:
+def _weighted_average(same_basis: list[dict[str, Any]]) -> int | None:
     """Weighted by quantity: Σ net / Σ quantity, in the stated basis (spec: "base de cálculo")."""
+    total_qty = sum((_qty_in_basis(h) for h in same_basis), Decimal(0))
     return round(Decimal(sum(h["net_cents"] for h in same_basis)) / total_qty) if total_qty else None
 
 
@@ -324,13 +325,12 @@ def product_analytics(
         per_merchant[h["merchant"] or "UNKNOWN"].append(h)
     comparison = []
     for merchant, items in sorted(per_merchant.items()):
-        q = sum((_qty_in_basis(h) for h in items), Decimal(0))
         ps = [h["unit_price_cents"] for h in items if h["unit_price_cents"] is not None]
         comparison.append(
             {
                 "merchant": merchant,
                 "purchases": len(items),
-                "avg_price_cents": _weighted_average(items, q),
+                "avg_price_cents": _weighted_average(items),
                 "min_price_cents": min(ps) if ps else None,
                 "max_price_cents": max(ps) if ps else None,
                 "last_price_cents": items[-1]["unit_price_cents"],
@@ -344,7 +344,7 @@ def product_analytics(
         "mixed_units": len({h["price_basis"] for h in history}) > 1,
         "total_quantity": str(total_qty.normalize()) if total_qty else "0",
         "total_spent_cents": total_spent,
-        "avg_price_cents": _weighted_average(same_basis, total_qty),
+        "avg_price_cents": _weighted_average(same_basis),
         "min_price_cents": min(prices) if prices else None,
         "max_price_cents": max(prices) if prices else None,
         "purchases": len(history),
@@ -352,6 +352,16 @@ def product_analytics(
         "by_merchant": comparison,
         "insufficient_data": len(history) < 2,
     }
+
+
+def _interval_days(days: list[date]) -> float | None:
+    """Average days between distinct purchase days (sorted); None with fewer than two."""
+    return round((days[-1] - days[0]).days / (len(days) - 1), 1) if len(days) > 1 else None
+
+
+def _per_month(amount: Decimal, f: Filters) -> float:
+    """`amount` over the period, as a rate per average month (365.25 / 12 days)."""
+    return round(float(amount / (Decimal(f.days) / Decimal("30.4375"))), 1)
 
 
 def consumption(db: Session, user_id: uuid.UUID, f: Filters, tz_name: str, limit: int) -> dict[str, Any]:
@@ -390,20 +400,18 @@ def consumption(db: Session, user_id: uuid.UUID, f: Filters, tz_name: str, limit
         p["spent"] += int(spent)
         p["days"].add(purchase_at.astimezone(tz).date())
 
-    months = Decimal(f.days) / Decimal("30.4375")
     items = []
     for pid, p in per_product.items():
         days = sorted(p["days"])
-        interval = round((days[-1] - days[0]).days / (len(days) - 1), 1) if len(days) > 1 else None
         items.append(
             {
                 "product_id": str(pid),
                 "name": p["name"],
                 "purchases": p["purchases"],
                 "units": str(p["units"].normalize()),
-                "units_per_month": round(float(p["units"] / months), 1),
+                "units_per_month": _per_month(p["units"], f),
                 "spent_cents": p["spent"],
-                "avg_interval_days": interval,
+                "avg_interval_days": _interval_days(days),
                 "first_purchase": days[0].isoformat(),
                 "last_purchase": days[-1].isoformat(),
             }
@@ -418,6 +426,122 @@ def consumption(db: Session, user_id: uuid.UUID, f: Filters, tz_name: str, limit
         },
         "items": items[:limit],
         "empty": not items,
+    }
+
+
+def _price_point(h: dict[str, Any]) -> dict[str, Any]:
+    return {"price_cents": h["unit_price_cents"], "date": h["day"].isoformat(), "discounted": h["discounted"]}
+
+
+def _store_prices(priced: list[dict[str, Any]]) -> dict[str, Any]:
+    """Average, lowest, highest and last price of one store's priced lines (in date order)."""
+    if not priced:
+        return {"avg_price_cents": None, "lowest": None, "highest": None, "last": None}
+    return {
+        "avg_price_cents": _weighted_average(priced),
+        # On a tie the earliest purchase is kept.
+        "lowest": _price_point(min(priced, key=lambda h: h["unit_price_cents"])),
+        "highest": _price_point(max(priced, key=lambda h: h["unit_price_cents"])),
+        "last": _price_point(priced[-1]),
+    }
+
+
+def list_articles(
+    db: Session, user_id: uuid.UUID, today: date, window_days: int, tz_name: str
+) -> dict[str, Any]:
+    """The smart list's first increment (spec 015 US-A): what the user bought in the window, per product
+    and, inside it, per store (the "article"). Each purchase is priced at its net value over the quantity in
+    the base unit (D10), so a discount shows in the price; no groups, sizes or store comparison.
+    """
+    tz = ZoneInfo(tz_name)
+    f = Filters(today - timedelta(days=window_days - 1), today)
+    rows = db.execute(
+        _line_scope(
+            select(
+                ReceiptLine.normalized_product_id,
+                Product.canonical_name,
+                Receipt.id,
+                Receipt.purchase_at,
+                Receipt.merchant,
+                Receipt.merchant_name,
+                _units,
+                ReceiptLine.quantity_decimal,
+                ReceiptLine.unit,
+                ReceiptLine.line_total_cents,
+                ReceiptLine.discount_cents,
+            ),
+            user_id,
+            f,
+            tz,
+        )
+        .join(Product, Product.id == ReceiptLine.normalized_product_id)
+        .order_by(Receipt.purchase_at, ReceiptLine.line_number)
+    ).all()
+    excluded = db.execute(
+        _line_scope(select(func.count(ReceiptLine.id)), user_id, f, tz).where(
+            ReceiptLine.normalized_product_id.is_(None)
+        )
+    ).scalar_one()
+
+    per_product: dict[uuid.UUID, dict[str, Any]] = {}
+    for pid, name, rid, purchase_at, merchant, merchant_name, units, qty, unit, total, discount in rows:
+        per_product.setdefault(pid, {"name": name, "lines": []})["lines"].append(
+            {
+                "receipt_id": rid,
+                "day": purchase_at.astimezone(tz).date(),
+                "store": merchant_label(merchant, merchant_name),
+                "packages": Decimal(units or 0),
+                "discounted": bool(discount),
+                # Priced from the net, never the printed price, so a discount shows in it (D10).
+                **_priced_line(qty, unit, unit_price=None, total=total, discount=discount),
+            }
+        )
+
+    items: list[dict[str, Any]] = []
+    for pid, p in per_product.items():
+        history = p["lines"]
+        basis, same_basis, _ = _price_basis(history)
+        priced = [h for h in same_basis if h["unit_price_cents"] is not None]
+        receipts_of: dict[tuple[str | None, str], set[uuid.UUID]] = defaultdict(set)
+        priced_of: dict[tuple[str | None, str], list[dict[str, Any]]] = defaultdict(list)
+        for h in history:
+            receipts_of[h["store"]].add(h["receipt_id"])
+        for h in priced:
+            priced_of[h["store"]].append(h)
+        articles = [
+            {
+                "merchant": merchant,
+                "merchant_name": store_name,
+                "purchases": len(receipts),
+                **_store_prices(priced_of[(merchant, store_name)]),
+            }
+            for (merchant, store_name), receipts in receipts_of.items()
+        ]
+        articles.sort(key=lambda a: (-a["purchases"], a["merchant_name"]))
+        packages = sum((h["packages"] for h in history), Decimal(0))
+        items.append(
+            {
+                "product_id": str(pid),
+                "name": p["name"],
+                "purchases": sum(a["purchases"] for a in articles),  # a receipt has one store
+                "packages": str(packages.normalize()),
+                "packages_per_month": _per_month(packages, f),
+                "avg_interval_days": _interval_days(sorted({h["day"] for h in history})),
+                "spent_cents": sum(h["net_cents"] for h in history),
+                "price_basis": basis,
+                "mixed_units": len({h["price_basis"] for h in history}) > 1,
+                "avg_price_cents": _weighted_average(priced),
+                "last_purchase": history[-1]["day"].isoformat(),
+                "articles": articles,
+            }
+        )
+    items.sort(key=lambda i: (-i["spent_cents"], i["name"]))
+    return {
+        "window_days": window_days,
+        "date_from": f.date_from.isoformat(),
+        "date_to": f.date_to.isoformat(),
+        "items": items,
+        "excluded_lines": excluded,
     }
 
 
@@ -477,7 +601,7 @@ def search_products(db: Session, user_id: uuid.UUID, q: str | None, limit: int) 
     items = []
     for pid, name, unit_type, line_count, spent, last in found:
         history = lines_of[pid]
-        basis, same_basis, total_qty = _price_basis(history)
+        basis, same_basis, _ = _price_basis(history)
         items.append(
             {
                 "id": str(pid),
@@ -486,7 +610,7 @@ def search_products(db: Session, user_id: uuid.UUID, q: str | None, limit: int) 
                 "lines": int(line_count or 0),
                 "spent_cents": int(spent or 0),
                 "last_purchase_at": last.isoformat() if last else None,
-                "avg_price_cents": _weighted_average(same_basis, total_qty),
+                "avg_price_cents": _weighted_average(same_basis),
                 "price_basis": basis,
                 "purchases": len({h["receipt_id"] for h in history}),
                 "merchants": len({h["merchant"] for h in history if h["merchant"] in SUPPORTED_MERCHANTS}),

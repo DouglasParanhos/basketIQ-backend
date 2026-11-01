@@ -20,6 +20,10 @@ LLM_ENABLED: false
 # GET /v1/config. true or false only.
 SMART_LIST_ENABLED: false
 
+# Window, in days, of the smart list's prices (RF-16) and of the step C comparison (D11): only confirmed purchases
+# from the last N days count, today included. Whole number, 7 to 366.
+COMPARISON_WINDOW_DAYS: 90
+
 # Home goal ring (RF-15). The band is decided on the goal percentage rounded to a whole number (half up),
 # the same number the screen shows: green up to GOAL_RING_GREEN_UP_TO_PCT inclusive, orange above it up to
 # GOAL_RING_ORANGE_UP_TO_PCT inclusive, red above. Whole numbers, 1 <= green < orange <= 100.

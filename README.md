@@ -221,13 +221,14 @@ Product decisions and feature flags live in one file, the only source of these v
 | `APP_NAME_FOR_CUSTOMER` | `Super Mercado` | Name customers see: login, page title, settings, installed-app name. 1–40 characters. |
 | `LLM_ENABLED` | `false` | Local LLM agent (Agno + Ollama) for receipt lines the parser could not read. |
 | `SMART_LIST_ENABLED` | `false` | Shows the smart shopping list («Lista») in the app. Off until the list is built and approved; the client reads it from `GET /v1/config`. |
+| `COMPARISON_WINDOW_DAYS` | `90` | Days of confirmed purchases (today included) behind the smart list's prices, `GET /v1/lists/articles`; also the step C comparison window (D11). 7–366. |
 | `GOAL_RING_GREEN_UP_TO_PCT` | `50` | Home goal ring: green up to this whole percentage of the goal, inclusive. `1 ≤ green < orange`. |
 | `GOAL_RING_ORANGE_UP_TO_PCT` | `75` | Orange above green up to this percentage, inclusive; red above. At most `100`. |
 | `AVERAGE_MIN_MONTHS` | `2` | Fewest complete months with confirmed receipts before the Home shows a monthly average (1–12). |
 | `AVERAGE_ON_TARGET_PCT` | `5` | How far (0–50 %) the last two months may be from the average and still count as «on the average». |
 
 - Every key is required and has no default in code. Unknown keys, wrong types (`LLM_ENABLED` and `SMART_LIST_ENABLED` must be
-  real booleans, the four percentage and month keys whole numbers within their limits), an empty or over-long name, or a missing file stop the API and the worker at start-up.
+  real booleans, the window, percentage and month keys whole numbers within their limits), an empty or over-long name, or a missing file stop the API and the worker at start-up.
 - Changing a value means editing the file and restarting the API and worker. The file is mounted into the
   containers (`./config:/app/config:ro`) and copied into the images.
 - The old `BASKETIQ_LLM_ENABLED` variable is rejected at start-up so it cannot be silently ignored.

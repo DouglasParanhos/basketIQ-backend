@@ -518,6 +518,47 @@ class MerchantPrice(BaseModel):
     last_date: str | None
 
 
+class ArticlePrice(BaseModel):
+    price_cents: int | None
+    date: str
+    discounted: bool
+
+
+class ListArticle(BaseModel):
+    """One product at one store: its purchases and the prices paid there, in the item's base unit."""
+
+    merchant: str | None  # supported merchant id; None for any other store
+    merchant_name: str
+    purchases: int
+    avg_price_cents: int | None
+    lowest: ArticlePrice | None
+    highest: ArticlePrice | None
+    last: ArticlePrice | None
+
+
+class ListItem(BaseModel):
+    product_id: str
+    name: str
+    purchases: int
+    packages: str
+    packages_per_month: float
+    avg_interval_days: float | None
+    spent_cents: int
+    price_basis: Literal["un", "kg", "l"]
+    mixed_units: bool
+    avg_price_cents: int | None
+    last_purchase: str
+    articles: list[ListArticle]
+
+
+class ListArticlesOut(BaseModel):
+    window_days: int
+    date_from: str
+    date_to: str
+    items: list[ListItem]
+    excluded_lines: int
+
+
 class ProductAnalyticsOut(BaseModel):
     product: ProductInfo
     price_basis: str
