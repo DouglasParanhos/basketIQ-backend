@@ -24,9 +24,9 @@ Contrato primeiro: depois de implementar regenera-se `openapi.json` para o front
 
 **Storage**: PostgreSQL (tabela nova, migração Alembic); objetos S3 compatíveis só para apagar originais (`ObjectStorage.delete_prefix`, já existente)
 
-**Testing**: pytest (`@pytest.mark.req("F-xx")`), fixtures `client`, `login`, `storage`, `db` de `tests/conftest.py`; base de teste por execução (HANDOFF §7)
+**Testing**: pytest (`@pytest.mark.req("F-xx")`), fixtures `client`, `login`, `storage`, `db` de `tests/conftest.py`; base de teste por execução (`README.md`, «Without `make`»)
 
-**Target Platform**: contentores Linux; nesta máquina o `make` não corre: usar Docker Desktop (comandos do HANDOFF §7 e `quickstart.md`)
+**Target Platform**: contentores Linux; nesta máquina o `make` não corre: usar Docker Desktop (comandos em `README.md`, «Without `make`», e `quickstart.md`)
 
 **Project Type**: web-service (API + worker; o frontend é outro repositório)
 

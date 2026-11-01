@@ -1,6 +1,6 @@
 # Quickstart: validar a spec 014
 
-Nesta máquina o `make` não corre e não há WSL. Docker Desktop e Git Bash com `export MSYS_NO_PATHCONV=1` (comandos do `Documentation/HANDOFF_2026-10-29.md`, secção 7, e da `quickstart.md` da spec 013). Pré-requisito: a *stack* local com a rede `basketiq_default` e o Postgres. **Não se aplicam migrações à base de desenvolvimento** (esta spec não tem nenhuma).
+Nesta máquina o `make` não corre e não há WSL. Docker Desktop e Git Bash com `export MSYS_NO_PATHCONV=1` (comandos em `README.md`, secção «Without `make`», e na `quickstart.md` da spec 013). Pré-requisito: a *stack* local com a rede `basketiq_default` e o Postgres. **Não se aplicam migrações à base de desenvolvimento** (esta spec não tem nenhuma).
 
 ## Verificações automáticas
 

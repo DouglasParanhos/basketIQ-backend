@@ -166,6 +166,50 @@ Tests carry `@pytest.mark.req("<id>")` with the test-plan id (F-01…F-33, RF-xx
 
 Performance check: `make bench LINES=5000` (and `LINES=50000`).
 
+### Without `make` (Docker Desktop, Git Bash)
+
+From the backend folder, with the local stack up (network `basketiq_default`). In Git Bash run
+`export MSYS_NO_PATHCONV=1` and use `C:/...` paths. A `>` redirect runs on the host, not in the container: always
+point it at a Windows path. Each step names the `make` target it mirrors: when a recipe in the `Makefile` changes, change
+the step too.
+
+```bash
+# 1. test image (src, tests, scripts; not specs nor Receipts)
+docker build --target test -t basketiq-test .
+
+# 2. full suite (= `make test-all`), one test database per run (a database shared between different trees breaks alembic)
+docker run --rm --network basketiq_default -e BASKETIQ_TEST_DATABASE_URL=postgresql+psycopg://basketiq:basketiq@postgres:5432/basketiq_test_run1 basketiq-test pytest -m "not golden_real and not llm" -q -p no:cacheprovider
+docker exec basketiq-postgres-1 psql -U basketiq -d postgres -c "DROP DATABASE IF EXISTS basketiq_test_run1"
+#    rules seen on a single photo only: pytest -m seen_once
+
+# 3. ruff, mypy, lock, bandit, pip-audit (= `make lint typecheck security` plus `uv lock --check`; caches in /tmp because of permissions)
+docker run --rm -e RUFF_CACHE_DIR=/tmp/r basketiq-test sh -c "ruff format --check src tests scripts alembic && ruff check src tests scripts alembic && mypy --cache-dir=/tmp/m"
+docker run --rm basketiq-test uv lock --check
+docker run --rm basketiq-test sh -c "bandit -q -r src -ll; pip-audit --skip-editable"
+
+# 4. traceability (= `make traceability`; needs specs)
+docker run --rm -v "C:/<root>/Backend/specs:/app/specs:ro" basketiq-test python scripts/traceability.py
+
+# 5. synthetic golden set, without and with OCR, against the baselines (= `make golden`)
+docker run --rm basketiq-test python -m basketiq.eval.golden --dir tests/golden/synthetic --baseline tests/golden/baseline.json
+docker run --rm basketiq-test python -m basketiq.eval.golden --dir tests/golden/synthetic --ocr --baseline tests/golden/baseline_ocr.json
+
+# 6. "unseen" golden on the real receipts, WITHOUT the QR and with the baseline (= `make golden-unseen`; this is what guards the parser)
+docker run --rm -v "C:/<root>/Receipts:/receipts:ro" basketiq-test python -m basketiq.eval.golden --dir /receipts --ocr --unseen --no-qr --baseline tests/golden/baseline_unseen.json
+
+# 7. the same WITH the QR, report only (= `make golden-unseen-qr`; the output folder must exist on the host)
+docker run --rm -v "C:/<root>/Receipts:/receipts:ro" -v "C:/<root>/reports:/out" basketiq-test python -m basketiq.eval.golden --dir /receipts --ocr --unseen --report /out/golden_unseen_qr.json
+
+# 8. real receipts with the calibrated parsers (no --unseen), no baseline (no `make` target)
+docker run --rm -v "C:/<root>/Receipts:/receipts:ro" basketiq-test python -m basketiq.eval.golden --dir /receipts --ocr --no-qr
+```
+
+Step 6 with real OCR takes a few minutes. `--blind` runs only `Receipts/_blind/`, which nobody opens while
+parsers are developed. To rewrite a baseline add `--write-baseline` (and `--meta KEY=VALUE`) to step 6 with
+`tests/golden` mounted read-write. Without `uv` on the host, `uv lock` runs inside the container with the repository
+mounted. When exporting patches use `git diff --binary --no-textconv`: Git for Windows applies `diff=astextplain` to
+PDFs and would export the extracted text instead of the bytes.
+
 ## Configuration
 
 ### Product configuration file: `config/app-config.yaml`

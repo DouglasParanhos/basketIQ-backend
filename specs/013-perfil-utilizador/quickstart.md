@@ -1,6 +1,6 @@
 # Quickstart: validar a spec 013
 
-Nesta máquina o `make` não corre e não há WSL. Usar Docker Desktop e Git Bash com `export MSYS_NO_PATHCONV=1` (comandos do `Documentation/HANDOFF_2026-10-29.md`, secção 7). Pré-requisito: a *stack* local (`docker compose up`) com a rede `basketiq_default` e o Postgres.
+Nesta máquina o `make` não corre e não há WSL. Usar Docker Desktop e Git Bash com `export MSYS_NO_PATHCONV=1` (comandos em `README.md`, secção «Without `make`»). Pré-requisito: a *stack* local (`docker compose up`) com a rede `basketiq_default` e o Postgres.
 
 ## Verificações automáticas
 
