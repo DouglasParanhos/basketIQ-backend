@@ -470,6 +470,7 @@ def search_products(db: Session, user_id: uuid.UUID, q: str | None, limit: int) 
     ).all()
     lines_of: dict[uuid.UUID, list[dict[str, Any]]] = defaultdict(list)
     for pid, rid, merchant, qty, unit, unit_price, total, discount in line_rows:
+        assert pid is not None  # the in_() filter excludes NULL
         lines_of[pid].append(
             {"receipt_id": rid, "merchant": merchant, **_priced_line(qty, unit, unit_price, total, discount)}
         )
@@ -570,6 +571,7 @@ def overview(
     weeks = [0] * len(blocks)
     stores: dict[tuple[str | None, str], list[int]] = {}
     for purchase_at, merchant, merchant_name, cents in spent_rows:
+        assert purchase_at is not None  # the date filter excludes NULL
         weeks[(purchase_at.astimezone(tz).day - 1) // WEEK_DAYS] += int(cents)
         count_and_total = stores.setdefault(merchant_label(merchant, merchant_name), [0, 0])
         count_and_total[0] += 1
