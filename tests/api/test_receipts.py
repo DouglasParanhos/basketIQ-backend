@@ -35,6 +35,29 @@ def test_valid_pdf_creates_a_single_job(
     assert len(queue.pending) == 1
 
 
+def test_a_write_is_committed_before_its_response_is_sent(
+    client: TestClient, login: Any, storage: Any
+) -> None:
+    """The client calls process as soon as upload-init answers: the receipt must already be visible to other sessions."""
+    from basketiq.db.session import get_sessionmaker
+
+    receipts_when_answering: list[int | None] = []
+
+    async def checking_app(scope: Any, receive: Any, send: Any) -> None:
+        async def send_and_count(message: Any) -> None:
+            if message["type"] == "http.response.start":
+                with get_sessionmaker()() as other:
+                    receipts_when_answering.append(other.scalar(select(func.count()).select_from(Receipt)))
+            await send(message)
+
+        await client.app(scope, receive, send_and_count)
+
+    checking = TestClient(checking_app)
+    login(checking)
+    upload(checking, storage, make_pdf(PINGO_LINES), put=False)
+    assert receipts_when_answering == [1]
+
+
 @pytest.mark.req("F-15a")
 @pytest.mark.req("F-26")
 def test_high_confidence_receipt_is_confirmed_automatically(
