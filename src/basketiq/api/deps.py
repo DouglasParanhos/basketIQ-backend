@@ -39,8 +39,8 @@ def get_db() -> Iterator[Session]:
         session.close()
 
 
-# scope="function": the teardown (commit) runs before the response is sent, not after it (FastAPI's default), so a client
-# acting on the response at once (upload-init → process) finds the row.
+# scope="function": the teardown (commit) runs before the response is sent, not after it (FastAPI's
+# default), so a client acting on the response at once (upload-init → process) finds the row.
 Db = Annotated[Session, Depends(get_db, scope="function")]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 

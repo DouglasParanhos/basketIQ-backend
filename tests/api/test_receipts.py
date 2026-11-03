@@ -38,7 +38,7 @@ def test_valid_pdf_creates_a_single_job(
 def test_a_write_is_committed_before_its_response_is_sent(
     client: TestClient, login: Any, storage: Any
 ) -> None:
-    """The client calls process as soon as upload-init answers: the receipt must already be visible to other sessions."""
+    """The client calls process as soon as upload-init answers, so the receipt must already be committed."""
     from basketiq.db.session import get_sessionmaker
 
     receipts_when_answering: list[int | None] = []
