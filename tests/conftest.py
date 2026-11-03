@@ -174,3 +174,21 @@ def run_jobs(storage: Any, queue: Any) -> Callable[..., int]:
         return processed
 
     return _run
+
+
+@pytest.fixture
+def config_is(client: TestClient) -> Iterator[Any]:
+    """Serve a different configuration to the API, as if the file had other values."""
+    from basketiq.api.main import app
+    from basketiq.app_config import DEFAULT_PATH, AppConfig, get_app_config, load_app_config
+
+    def use(name: str = "Super Mercado", llm: bool = False, smart_list: bool = False, **keys: int) -> None:
+        values = load_app_config(DEFAULT_PATH).model_dump(by_alias=True)
+        values.update(
+            {"APP_NAME_FOR_CUSTOMER": name, "LLM_ENABLED": llm, "SMART_LIST_ENABLED": smart_list, **keys}
+        )
+        cfg = AppConfig.model_validate(values)
+        app.dependency_overrides[get_app_config] = lambda: cfg
+
+    yield use
+    app.dependency_overrides.pop(get_app_config, None)

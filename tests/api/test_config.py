@@ -1,29 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
-from basketiq.app_config import DEFAULT_PATH, AppConfig, get_app_config, load_app_config
-
-
-@pytest.fixture
-def config_is(client: TestClient) -> Iterator[Any]:
-    """Serve a different configuration to the API, as if the file had other values."""
-    from basketiq.api.main import app
-
-    def use(name: str, llm: bool = False, smart_list: bool = False, **keys: int) -> None:
-        values = load_app_config(DEFAULT_PATH).model_dump(by_alias=True)
-        values.update(
-            {"APP_NAME_FOR_CUSTOMER": name, "LLM_ENABLED": llm, "SMART_LIST_ENABLED": smart_list, **keys}
-        )
-        cfg = AppConfig.model_validate(values)
-        app.dependency_overrides[get_app_config] = lambda: cfg
-
-    yield use
-    app.dependency_overrides.pop(get_app_config, None)
+from basketiq.app_config import get_app_config
 
 
 @pytest.mark.req("CFG-02")
@@ -85,6 +67,7 @@ def test_admin_config_shows_every_key_to_operators_only(
         "app_name_for_customer": "Super Mercado",
         "llm_enabled": False,
         "smart_list_enabled": False,
+        "comparison_window_days": 90,
         "goal_ring_green_up_to_pct": 50,
         "goal_ring_orange_up_to_pct": 75,
         "average_min_months": 2,
@@ -95,6 +78,7 @@ def test_admin_config_shows_every_key_to_operators_only(
         "app_name_for_customer": "Loja",
         "llm_enabled": True,
         "smart_list_enabled": True,
+        "comparison_window_days": 90,
         "goal_ring_green_up_to_pct": 40,
         "goal_ring_orange_up_to_pct": 75,
         "average_min_months": 3,
@@ -106,6 +90,7 @@ VALID_KEYS = {
     "APP_NAME_FOR_CUSTOMER": "Loja",
     "LLM_ENABLED": "false",
     "SMART_LIST_ENABLED": "false",
+    "COMPARISON_WINDOW_DAYS": "90",
     "GOAL_RING_GREEN_UP_TO_PCT": "50",
     "GOAL_RING_ORANGE_UP_TO_PCT": "75",
     "AVERAGE_MIN_MONTHS": "2",

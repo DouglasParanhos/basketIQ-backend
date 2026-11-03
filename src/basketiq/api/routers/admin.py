@@ -58,6 +58,7 @@ class ProductConfigOut(BaseModel):
     app_name_for_customer: str
     llm_enabled: bool
     smart_list_enabled: bool
+    comparison_window_days: int
     goal_ring_green_up_to_pct: int
     goal_ring_orange_up_to_pct: int
     average_min_months: int

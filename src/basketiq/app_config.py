@@ -44,6 +44,7 @@ class AppConfig(BaseModel):
     ] = Field(alias="APP_NAME_FOR_CUSTOMER")
     llm_enabled: StrictBool = Field(alias="LLM_ENABLED")
     smart_list_enabled: StrictBool = Field(alias="SMART_LIST_ENABLED")
+    comparison_window_days: StrictInt = Field(alias="COMPARISON_WINDOW_DAYS", ge=7, le=366)
     # Home ring (RF-15): green up to this percentage of the goal, orange up to the next one, red above.
     goal_ring_green_up_to_pct: StrictInt = Field(alias="GOAL_RING_GREEN_UP_TO_PCT", ge=1)
     goal_ring_orange_up_to_pct: StrictInt = Field(alias="GOAL_RING_ORANGE_UP_TO_PCT", le=100)

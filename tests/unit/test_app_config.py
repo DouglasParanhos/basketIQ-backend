@@ -23,6 +23,7 @@ DEFAULTS: dict[str, object] = {
     "APP_NAME_FOR_CUSTOMER": "Loja",
     "LLM_ENABLED": False,
     "SMART_LIST_ENABLED": False,
+    "COMPARISON_WINDOW_DAYS": 90,
     "GOAL_RING_GREEN_UP_TO_PCT": 50,
     "GOAL_RING_ORANGE_UP_TO_PCT": 75,
     "AVERAGE_MIN_MONTHS": 2,
@@ -150,6 +151,24 @@ def test_the_limits_are_accepted_at_their_edges(tmp_path: Path) -> None:
     )
     assert (config.goal_ring_green_up_to_pct, config.goal_ring_orange_up_to_pct) == (1, 100)
     assert (config.average_min_months, config.average_on_target_pct) == (12, 0)
+
+
+@pytest.mark.req("F-147")
+def test_the_comparison_window_is_90_days_in_the_repository_file() -> None:
+    assert load_app_config(DEFAULT_PATH).comparison_window_days == 90
+
+
+@pytest.mark.req("F-147")
+@pytest.mark.parametrize("bad", [None, "'90'", "90.5", "true", 6, 367])
+def test_the_comparison_window_is_a_required_whole_number_of_days(tmp_path: Path, bad: object) -> None:
+    with pytest.raises(AppConfigError, match="COMPARISON_WINDOW_DAYS"):
+        load_app_config(write(tmp_path, cfg(COMPARISON_WINDOW_DAYS=bad)))
+
+
+@pytest.mark.req("F-147")
+@pytest.mark.parametrize("edge", [7, 366])
+def test_the_comparison_window_accepts_its_edges(tmp_path: Path, edge: int) -> None:
+    assert load_app_config(write(tmp_path, cfg(COMPARISON_WINDOW_DAYS=edge))).comparison_window_days == edge
 
 
 def test_missing_file(tmp_path: Path) -> None:

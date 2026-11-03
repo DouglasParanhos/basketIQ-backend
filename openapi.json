@@ -1989,6 +1989,27 @@
         }
       }
     },
+    "/v1/lists/articles": {
+      "get": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Smart list, first increment: products bought in the window, per store",
+        "operationId": "articles_v1_lists_articles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListArticlesOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/jobs": {
       "get": {
         "tags": [
@@ -2487,6 +2508,36 @@
           "finished_at"
         ],
         "title": "AdminJobOut"
+      },
+      "ArticlePrice": {
+        "properties": {
+          "price_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Cents"
+          },
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "discounted": {
+            "type": "boolean",
+            "title": "Discounted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_cents",
+          "date",
+          "discounted"
+        ],
+        "title": "ArticlePrice"
       },
       "CardsOut": {
         "properties": {
@@ -3172,6 +3223,208 @@
         },
         "type": "object",
         "title": "LinePatchIn"
+      },
+      "ListArticle": {
+        "properties": {
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "merchant_name": {
+            "type": "string",
+            "title": "Merchant Name"
+          },
+          "purchases": {
+            "type": "integer",
+            "title": "Purchases"
+          },
+          "avg_price_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Price Cents"
+          },
+          "lowest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArticlePrice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "highest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArticlePrice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArticlePrice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "merchant",
+          "merchant_name",
+          "purchases",
+          "avg_price_cents",
+          "lowest",
+          "highest",
+          "last"
+        ],
+        "title": "ListArticle",
+        "description": "One product at one store: its purchases and the prices paid there, in the item's base unit."
+      },
+      "ListArticlesOut": {
+        "properties": {
+          "window_days": {
+            "type": "integer",
+            "title": "Window Days"
+          },
+          "date_from": {
+            "type": "string",
+            "title": "Date From"
+          },
+          "date_to": {
+            "type": "string",
+            "title": "Date To"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "excluded_lines": {
+            "type": "integer",
+            "title": "Excluded Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "window_days",
+          "date_from",
+          "date_to",
+          "items",
+          "excluded_lines"
+        ],
+        "title": "ListArticlesOut"
+      },
+      "ListItem": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "title": "Product Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "purchases": {
+            "type": "integer",
+            "title": "Purchases"
+          },
+          "packages": {
+            "type": "string",
+            "title": "Packages"
+          },
+          "packages_per_month": {
+            "type": "number",
+            "title": "Packages Per Month"
+          },
+          "avg_interval_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Interval Days"
+          },
+          "spent_cents": {
+            "type": "integer",
+            "title": "Spent Cents"
+          },
+          "price_basis": {
+            "type": "string",
+            "enum": [
+              "un",
+              "kg",
+              "l"
+            ],
+            "title": "Price Basis"
+          },
+          "mixed_units": {
+            "type": "boolean",
+            "title": "Mixed Units"
+          },
+          "avg_price_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Price Cents"
+          },
+          "last_purchase": {
+            "type": "string",
+            "title": "Last Purchase"
+          },
+          "articles": {
+            "items": {
+              "$ref": "#/components/schemas/ListArticle"
+            },
+            "type": "array",
+            "title": "Articles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "name",
+          "purchases",
+          "packages",
+          "packages_per_month",
+          "avg_interval_days",
+          "spent_cents",
+          "price_basis",
+          "mixed_units",
+          "avg_price_cents",
+          "last_purchase",
+          "articles"
+        ],
+        "title": "ListItem"
       },
       "MeOut": {
         "properties": {
@@ -4085,6 +4338,10 @@
             "type": "boolean",
             "title": "Smart List Enabled"
           },
+          "comparison_window_days": {
+            "type": "integer",
+            "title": "Comparison Window Days"
+          },
           "goal_ring_green_up_to_pct": {
             "type": "integer",
             "title": "Goal Ring Green Up To Pct"
@@ -4107,6 +4364,7 @@
           "app_name_for_customer",
           "llm_enabled",
           "smart_list_enabled",
+          "comparison_window_days",
           "goal_ring_green_up_to_pct",
           "goal_ring_orange_up_to_pct",
           "average_min_months",
