@@ -182,6 +182,95 @@
         }
       }
     },
+    "/v1/auth/passkey/options": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Options for navigator.credentials.get(); sets the one-time challenge cookie",
+        "operationId": "passkey_options_v1_auth_passkey_options_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Passkey Options V1 Auth Passkey Options Post"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/passkey/verify": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign in with a passkey (body: the assertion as JSON); sets the session cookies",
+        "operationId": "passkey_verify_v1_auth_passkey_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Credential"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me": {
       "get": {
         "tags": [
@@ -289,6 +378,179 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/passkeys": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "The person's passkeys",
+        "operationId": "list_passkeys_v1_me_passkeys_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PasskeyOut"
+                  },
+                  "title": "Response List Passkeys V1 Me Passkeys Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Register the passkey the phone created (body: the credential as JSON)",
+        "operationId": "add_passkey_v1_me_passkeys_post",
+        "parameters": [
+          {
+            "name": "biq_webauthn",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Biq Webauthn"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Credential"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/passkeys/options": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Options for navigator.credentials.create(); sets the one-time challenge cookie",
+        "operationId": "passkey_registration_options_v1_me_passkeys_options_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Passkey Registration Options V1 Me Passkeys Options Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/passkeys/{passkey_id}": {
+      "delete": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Remove one of the person's passkeys",
+        "operationId": "remove_passkey_v1_me_passkeys__passkey_id__delete",
+        "parameters": [
+          {
+            "name": "passkey_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Passkey Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -4001,6 +4263,39 @@
         ],
         "title": "OverviewOut"
       },
+      "PasskeyOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "last_used_at"
+        ],
+        "title": "PasskeyOut"
+      },
       "PhotoAddIn": {
         "properties": {
           "filename": {
@@ -4595,6 +4890,18 @@
               }
             ],
             "title": "Onboarding Completed At"
+          },
+          "passkey_offer_dismissed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passkey Offer Dismissed At"
           }
         },
         "type": "object",
@@ -4603,7 +4910,8 @@
           "merchants",
           "goals",
           "monthly_goal_cents",
-          "onboarding_completed_at"
+          "onboarding_completed_at",
+          "passkey_offer_dismissed_at"
         ],
         "title": "ProfileOut"
       },
@@ -4649,6 +4957,12 @@
             "type": "boolean",
             "const": true,
             "title": "Onboarding Completed",
+            "default": true
+          },
+          "passkey_offer_dismissed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Passkey Offer Dismissed",
             "default": true
           }
         },

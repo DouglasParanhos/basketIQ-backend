@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-15
 
-**Status**: Implemented (MVP)
+**Status**: Implemented (MVP). Alterada em 2026-11-04 pela spec 016 (passkeys): US1, FR-001 e SC-003.
 
 **Input**: Especificação Funcional RF-01, §4.1; Especificação Técnica §8; Plano de Testes F-01…F-03a, §9.
 
@@ -13,7 +13,8 @@
 ### User Story 1 - Entrar com Google (Priority: P1)
 
 Uma pessoa abre a aplicação, escolhe **Entrar com Google** e chega ao dashboard com o seu perfil
-criado ou recuperado. É o único método de autenticação do MVP.
+criado ou recuperado. É o único método que cria e recupera a conta; a passkey (spec 016) é o método
+alternativo de entrada para quem já tem conta.
 
 **Why this priority**: sem sessão não há upload, revisão nem análises.
 
@@ -92,9 +93,9 @@ configuração.
 
 ### Functional Requirements
 
-- **FR-001**: O sistema MUST autenticar exclusivamente com Google OIDC (código de autorização + PKCE,
+- **FR-001**: O sistema MUST criar e recuperar contas exclusivamente com Google OIDC (código de autorização + PKCE,
   `state`, `nonce`) fora dos ambientes local/teste; localmente usa um servidor OIDC simulado pelo
-  mesmo código, sem bypass.
+  mesmo código, sem bypass. A entrada com passkey, só para contas existentes, está na spec 016.
 - **FR-002**: O sistema MUST guardar apenas `sub` (prefixado pelo emissor), e-mail, nome, papel,
   datas de login e consentimento.
 - **FR-003**: O sistema MUST emitir token de acesso de 15 minutos e refresh de 30 dias rotativo,
@@ -118,7 +119,7 @@ configuração.
 - **SC-001**: 100 % dos endpoints de dados respondem 401 sem sessão
   (`tests/api/test_receipts.py::test_endpoints_require_authentication`).
 - **SC-002**: Logout invalida a sessão no pedido seguinte (0 s de janela).
-- **SC-003**: Nenhum método de autenticação além de Google está exposto no contrato OpenAPI.
+- **SC-003**: Nenhum método de autenticação além de Google e passkey (spec 016) está exposto no contrato OpenAPI.
 
 ## Assumptions
 

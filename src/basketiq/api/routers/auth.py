@@ -5,20 +5,23 @@ import logging
 import secrets
 import uuid
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, Query, Request, Response
 from fastapi.responses import RedirectResponse
 
 from basketiq.api.deps import (
     ACCESS_COOKIE,
+    PASSKEY_COOKIE,
     REFRESH_COOKIE,
     STATE_COOKIE,
     Db,
     SettingsDep,
+    clear_passkey_challenge_cookie,
     clear_session_cookies,
     csrf_protect,
+    set_passkey_challenge_cookie,
     set_session_cookies,
 )
 from basketiq.api.errors import ApiError, ErrorBody, error_response
@@ -36,7 +39,7 @@ from basketiq.auth.sessions import (
 )
 from basketiq.config import get_settings
 from basketiq.db.models import UserSession
-from basketiq.services import accounts, audit
+from basketiq.services import accounts, audit, passkeys
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 log = logging.getLogger(__name__)
@@ -118,8 +121,8 @@ def callback(
         return fail("login_failed")
 
     user, created = accounts.upsert_from_claims(db, settings, claims)
+    accounts.record_sign_in(db, settings, user, "google", first_login=created)
     issued = create_session(db, settings, user)
-    audit.record(db, "LOGIN", user_id=user.id, first_login=created)
     response = RedirectResponse(_frontend(settings.frontend_base_url, "/"), 302)
     response.delete_cookie(STATE_COOKIE, path="/v1/auth")
     set_session_cookies(response, settings, issued)
@@ -169,4 +172,46 @@ def logout(request: Request, db: Db, settings: SettingsDep) -> Response:
         audit.record(db, "LOGOUT", user_id=session.user_id)
     response = Response(status_code=204)
     clear_session_cookies(response, settings)
+    return response
+
+
+# ---------------------------------------------------------------- passkeys (RF-01, spec 016)
+# No CSRF header here: there is no session yet. The challenge cookie is SameSite=Lax (absent from a cross-site
+# POST) and the passkey signature covers the origin, so a forged request cannot complete a sign-in.
+
+
+@router.post(
+    "/passkey/options",
+    response_model=dict[str, Any],
+    responses={429: {"model": ErrorBody}},
+    summary="Options for navigator.credentials.get(); sets the one-time challenge cookie",
+)
+@limiter.limit(lambda: get_settings().rate_limit_login)
+def passkey_options(request: Request, response: Response, db: Db, settings: SettingsDep) -> dict[str, Any]:
+    options, challenge_id = passkeys.authentication_options(db, settings)
+    set_passkey_challenge_cookie(response, settings, challenge_id, passkeys.CHALLENGE_SECONDS)
+    return options
+
+
+@router.post(
+    "/passkey/verify",
+    status_code=204,
+    response_class=Response,
+    responses={401: {"model": ErrorBody}, 429: {"model": ErrorBody}},
+    summary="Sign in with a passkey (body: the assertion as JSON); sets the session cookies",
+)
+@limiter.limit(lambda: get_settings().rate_limit_login)
+def passkey_verify(
+    request: Request, credential: Annotated[dict[str, Any], Body()], db: Db, settings: SettingsDep
+) -> Response:
+    try:
+        user = passkeys.authenticate(db, settings, credential, request.cookies.get(PASSKEY_COOKIE))
+    except passkeys.PasskeyError as exc:
+        log.warning("passkey_failed", extra={"reason": exc.code})
+        raise ApiError(401, exc.code, "Esta passkey não é válida. Entre com Google.") from exc
+    accounts.record_sign_in(db, settings, user, "passkey")
+    issued = create_session(db, settings, user)
+    response = Response(status_code=204)
+    clear_passkey_challenge_cookie(response, settings)
+    set_session_cookies(response, settings, issued)
     return response

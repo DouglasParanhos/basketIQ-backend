@@ -37,6 +37,17 @@ class DeletionResult(BaseModel):
     objects_deleted: int
 
 
+# ---------------------------------------------------------------- passkeys (RF-01, spec 016)
+
+
+class PasskeyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    last_used_at: datetime | None
+
+
 # ---------------------------------------------------------------- profile (RF-13, RF-14)
 
 
@@ -46,6 +57,7 @@ class ProfileOut(BaseModel):
     goals: list[Goal]
     monthly_goal_cents: int | None
     onboarding_completed_at: datetime | None
+    passkey_offer_dismissed_at: datetime | None
 
 
 class ProfilePatch(BaseModel):
@@ -59,6 +71,7 @@ class ProfilePatch(BaseModel):
     goals: list[Goal] = Field(default_factory=list)
     monthly_goal_cents: StrictInt | None = None  # whole cents, never a decimal (constitution II)
     onboarding_completed: Literal[True] = True
+    passkey_offer_dismissed: Literal[True] = True  # the one-time passkey offer on the Home (spec 016)
 
     @field_validator("household_size")
     @classmethod

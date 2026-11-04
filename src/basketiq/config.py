@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 from functools import lru_cache
 from typing import Annotated, Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -39,6 +41,9 @@ class Settings(BaseSettings):
     oidc_client_secret: str = ""
     oidc_redirect_uri: str = "http://localhost:5173/v1/auth/callback"
     frontend_base_url: str = "http://localhost:5173"
+    # Passkeys (spec 016): the domain they are bound to. Defaults to the frontend host. Changing it later
+    # invalidates every registered passkey, and future native apps will share it, so fix it before launch.
+    webauthn_rp_id: str | None = None
 
     jwt_secret: str = "change-me-local-only-secret-with-enough-length"  # noqa: S105
     access_token_ttl_seconds: int = 900
@@ -93,7 +98,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _check_production_rules(self) -> Settings:
         if self.env in ("staging", "production"):
-            # RF-01: Google is the only authentication method outside local/test.
+            # RF-01: Google is the only identity provider outside local/test; passkeys only sign accounts in.
             if self.oidc_issuer != GOOGLE_ISSUER:
                 raise ValueError("Only Google OIDC is allowed in staging/production")
             if self.jwt_secret.startswith("change-me") or len(self.jwt_secret) < 32:
@@ -102,11 +107,32 @@ class Settings(BaseSettings):
                 raise ValueError("Secure cookies are required outside local/test")
             if self.oidc_browser_base_url or self.oidc_internal_base_url:
                 raise ValueError("OIDC URL rewriting is a local-only feature")
+            rp_id = self.passkey_rp_id
+            if "." not in rp_id or _is_ip(rp_id):
+                raise ValueError("BASKETIQ_WEBAUTHN_RP_ID must be a domain, not an IP address or localhost")
+            if not f".{self.frontend_host}".endswith(f".{rp_id}"):
+                raise ValueError("BASKETIQ_WEBAUTHN_RP_ID must be the frontend host or a parent domain of it")
         return self
 
     @property
     def is_local(self) -> bool:
         return self.env in ("local", "test")
+
+    @property
+    def frontend_host(self) -> str:
+        return urlparse(self.frontend_base_url).hostname or ""
+
+    @property
+    def passkey_rp_id(self) -> str:
+        return self.webauthn_rp_id or self.frontend_host
+
+
+def _is_ip(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
 
 
 @lru_cache

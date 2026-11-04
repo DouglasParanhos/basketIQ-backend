@@ -21,6 +21,7 @@ EMPTY = {
     "goals": [],
     "monthly_goal_cents": None,
     "onboarding_completed_at": None,
+    "passkey_offer_dismissed_at": None,
 }
 FULL = {
     "household_size": 2,

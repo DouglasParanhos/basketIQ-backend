@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     SmallInteger,
     String,
@@ -87,8 +88,36 @@ class UserProfile(Base):
     goals: Mapped[list[Any]] = mapped_column(default=list, server_default="[]")
     monthly_goal_cents: Mapped[int | None] = mapped_column(BigInteger)
     onboarding_completed_at: Mapped[datetime | None]
+    passkey_offer_dismissed_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+
+class WebAuthnCredential(Base):
+    """A passkey (RF-01, spec 016): public key and signature counter. Biometrics never leave the phone."""
+
+    __tablename__ = "webauthn_credentials"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    credential_id: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
+    public_key: Mapped[bytes] = mapped_column(LargeBinary)
+    sign_count: Mapped[int] = mapped_column(BigInteger)  # unsigned 32-bit on the authenticator
+    transports: Mapped[list[Any]] = mapped_column(default=list, server_default="[]")
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_used_at: Mapped[datetime | None]
+
+
+class WebAuthnChallenge(Base):
+    """A one-time WebAuthn challenge. Deleted when used, so it cannot be replayed."""
+
+    __tablename__ = "webauthn_challenges"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    challenge: Mapped[bytes] = mapped_column(LargeBinary)
+    purpose: Mapped[str] = mapped_column(String(16))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    expires_at: Mapped[datetime] = mapped_column(index=True)
 
 
 class UserSession(Base):

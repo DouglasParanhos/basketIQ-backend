@@ -66,7 +66,7 @@ def database() -> Iterator[None]:
 
 TABLES = (
     "audit_events, merchant_configs, product_aliases, receipt_lines, processing_jobs, receipts, "
-    "products, user_sessions, users"
+    "products, user_sessions, webauthn_challenges, webauthn_credentials, users"
 )
 
 
