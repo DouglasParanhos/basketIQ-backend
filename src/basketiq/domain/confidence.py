@@ -111,6 +111,27 @@ def _join_reason(note: dict[str, Any]) -> ReviewReason:
     )
 
 
+# An image whose reading misses this share of its total, or leaves this share of its lines unread, lost
+# products (not one misread price, which the review shows and the person fixes).
+ILLEGIBLE_MISSING_SHARE = 0.10
+ILLEGIBLE_UNREAD_SHARE = 0.25
+
+
+def _lost_products(view: ReceiptView, rec: Reconciliation) -> bool:
+    """F-230: products of an image read too badly to review; another photo is asked for first. Every good
+    photo of the golden set reads its total, sums its lines to it and leaves no line unread. Edits clear it as
+    they fix it.
+    """
+    unread = sum(1 for line in view.lines if line.unresolved and not line.edited_fields)
+    total = rec.printed_total_cents
+    return (
+        not view.lines
+        or total is None
+        or abs(rec.difference_cents or 0) > ILLEGIBLE_MISSING_SHARE * total
+        or unread > ILLEGIBLE_UNREAD_SHARE * len(view.lines)
+    )
+
+
 # Why a line is reviewed when only one of its fields is in doubt.
 _ONE_FIELD_IN_DOUBT: dict[tuple[str, ...], str] = {
     ("quantity",): "Quantidade por confirmar: não está impressa, foi deduzida do total.",
@@ -255,6 +276,10 @@ def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
             )
 
     if view.route in _READ_BY_OCR:
+        if _lost_products(view, rec):
+            reasons.append(
+                ReviewReason(code="illegible", message="Não conseguimos ler bem os produtos deste talão.")
+            )
         reasons.append(
             ReviewReason(
                 code="photo_not_verified",
