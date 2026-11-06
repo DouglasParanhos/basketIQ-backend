@@ -21,6 +21,8 @@ from basketiq.api.deps import (
     clear_passkey_challenge_cookie,
     clear_session_cookies,
     csrf_protect,
+    device_passkeys,
+    set_device_passkeys,
     set_passkey_challenge_cookie,
     set_session_cookies,
 )
@@ -188,8 +190,12 @@ def logout(request: Request, db: Db, settings: SettingsDep) -> Response:
 )
 @limiter.limit(lambda: get_settings().rate_limit_login)
 def passkey_options(request: Request, response: Response, db: Db, settings: SettingsDep) -> dict[str, Any]:
-    options, challenge_id = passkeys.authentication_options(db, settings)
+    device_ids = device_passkeys(request)
+    kept = passkeys.existing(db, device_ids)
+    options, challenge_id = passkeys.authentication_options(db, settings, kept)
     set_passkey_challenge_cookie(response, settings, challenge_id, passkeys.CHALLENGE_SECONDS)
+    if device_ids:  # forget the ones removed since; keep the rest another 400 days
+        set_device_passkeys(response, settings, kept)
     return options
 
 

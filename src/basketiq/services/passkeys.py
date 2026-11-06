@@ -25,8 +25,11 @@ from webauthn import (
 from webauthn.helpers import parse_authentication_credential_json, parse_registration_credential_json
 from webauthn.helpers.exceptions import WebAuthnException
 from webauthn.helpers.structs import (
+    AuthenticatorAttachment,
     AuthenticatorSelectionCriteria,
+    AuthenticatorTransport,
     PublicKeyCredentialDescriptor,
+    PublicKeyCredentialHint,
     ResidentKeyRequirement,
     UserVerificationRequirement,
 )
@@ -99,11 +102,14 @@ def registration_options(
         user_id=user.id.bytes,  # random, not personal data
         user_name=user.email,
         user_display_name=user.display_name or user.email,
+        # Only the phone's own lock: no security key, no QR code to use another device.
         authenticator_selection=AuthenticatorSelectionCriteria(
+            authenticator_attachment=AuthenticatorAttachment.PLATFORM,
             resident_key=ResidentKeyRequirement.REQUIRED,
             user_verification=UserVerificationRequirement.REQUIRED,
         ),
         exclude_credentials=[PublicKeyCredentialDescriptor(id=credential_id) for credential_id in existing],
+        hints=[PublicKeyCredentialHint.CLIENT_DEVICE],
     )
     return _options_dict(options), _issue_challenge(db, options.challenge, REGISTER, user.id)
 
@@ -140,12 +146,35 @@ def register(
     return passkey
 
 
-def authentication_options(db: Session, settings: Settings) -> tuple[dict[str, Any], str]:
-    """Options for `navigator.credentials.get()`: no credential list, the phone offers its passkeys."""
-    options = generate_authentication_options(
-        rp_id=settings.passkey_rp_id, user_verification=UserVerificationRequirement.REQUIRED
+def existing(db: Session, credential_ids: list[bytes]) -> list[bytes]:
+    """The ones of `credential_ids` still registered, in the same order."""
+    if not credential_ids:
+        return []
+    query = select(WebAuthnCredential.credential_id).where(
+        WebAuthnCredential.credential_id.in_(credential_ids)
     )
-    return _options_dict(options), _issue_challenge(db, options.challenge, LOGIN, None)
+    known = set(db.scalars(query))
+    return [credential_id for credential_id in credential_ids if credential_id in known]
+
+
+def authentication_options(
+    db: Session, settings: Settings, allowed: list[bytes]
+) -> tuple[dict[str, Any], str]:
+    """Options for `navigator.credentials.get()` and the id of their challenge. Only the `allowed` passkeys
+    (this phone's), as kept in the phone ("internal"): the phone goes straight to its lock, never to a QR code
+    or a security key. Without any, nothing is allowed.
+    """
+    options = generate_authentication_options(
+        rp_id=settings.passkey_rp_id,
+        user_verification=UserVerificationRequirement.REQUIRED,
+        allow_credentials=[
+            PublicKeyCredentialDescriptor(id=credential_id, transports=[AuthenticatorTransport.INTERNAL])
+            for credential_id in allowed
+        ],
+    )
+    result = _options_dict(options)
+    result["hints"] = [PublicKeyCredentialHint.CLIENT_DEVICE.value]  # not a parameter of py_webauthn 3.0 here
+    return result, _issue_challenge(db, options.challenge, LOGIN, None)
 
 
 def authenticate(

@@ -151,6 +151,36 @@ def test_register_a_passkey_after_signing_in(client: TestClient, login: Any, db:
     assert db.scalar(select(AuditEvent.event_type).where(AuditEvent.event_type == "PASSKEY_ADDED"))
 
 
+@pytest.mark.req("F-222")
+def test_only_the_phones_own_lock_and_its_own_passkeys_are_offered(
+    client: TestClient, login: Any, db: Session
+) -> None:
+    login(client)
+    options = client.post("/v1/me/passkeys/options").json()
+    assert options["authenticatorSelection"]["authenticatorAttachment"] == "platform"
+    assert options["hints"] == ["client-device"]
+    phone = SoftAuthenticator()
+    passkey_id = register(client, phone).json()["id"]
+    # Signing out ends the session, not what the phone knows it holds.
+    assert client.post("/v1/auth/logout").status_code == 204
+    sign_in = client.post("/v1/auth/passkey/options").json()
+    credential_id = bytes_to_base64url(phone.credential_id)
+    assert sign_in["allowCredentials"] == [
+        {"id": credential_id, "type": "public-key", "transports": ["internal"]}
+    ]
+    assert sign_in["hints"] == ["client-device"]
+    signed_in = passkey_sign_in(client, phone)
+    assert signed_in.status_code == 204
+    client.headers["X-CSRF-Token"] = signed_in.cookies["biq_csrf"]
+
+    # Removed, the phone stops offering it; another browser never had anything to offer.
+    assert client.delete(f"/v1/me/passkeys/{passkey_id}").status_code == 204
+    assert client.post("/v1/auth/passkey/options").json()["allowCredentials"] == []
+    assert not client.cookies.get("biq_passkeys", path="/v1")
+    client.cookies.set("biq_passkeys", "not*base64.", path="/v1")
+    assert client.post("/v1/auth/passkey/options").json()["allowCredentials"] == []
+
+
 @pytest.mark.req("F-206")
 def test_registering_needs_a_session_csrf_and_the_current_consent(client: TestClient, login: Any) -> None:
     assert client.post("/v1/me/passkeys/options").status_code in (401, 403)

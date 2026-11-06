@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends, Request, Response
 from sqlalchemy.orm import Session
+from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 
 from basketiq.api.errors import ApiError
 from basketiq.auth.sessions import IssuedTokens, SessionError, decode_access_token
@@ -23,6 +24,9 @@ REFRESH_COOKIE = "biq_rt"
 CSRF_COOKIE = "biq_csrf"
 STATE_COOKIE = "biq_oauth"
 PASSKEY_COOKIE = "biq_webauthn"  # id of the pending one-time passkey challenge
+DEVICE_PASSKEYS_COOKIE = "biq_passkeys"  # the passkeys this phone holds (see `set_device_passkeys`)
+DEVICE_PASSKEYS_MAX = 5
+DEVICE_PASSKEYS_SECONDS = 400 * 86400  # the longest a browser keeps a cookie
 CSRF_HEADER = "X-CSRF-Token"
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -108,6 +112,38 @@ def set_passkey_challenge_cookie(
 
 def clear_passkey_challenge_cookie(response: Response, settings: Settings) -> None:
     response.delete_cookie(PASSKEY_COOKIE, path="/v1", secure=settings.cookie_secure, samesite="lax")
+
+
+def device_passkeys(request: Request) -> list[bytes]:
+    """The credential ids of the passkeys made on this phone (see `set_device_passkeys`)."""
+    ids: list[bytes] = []
+    for part in request.cookies.get(DEVICE_PASSKEYS_COOKIE, "").split(".")[:DEVICE_PASSKEYS_MAX]:
+        try:
+            if credential_id := base64url_to_bytes(part):
+                ids.append(credential_id)
+        except ValueError:
+            continue
+    return ids
+
+
+def set_device_passkeys(response: Response, settings: Settings, ids: list[bytes]) -> None:
+    """Remember on this phone which passkeys it holds, so the sign-in asks only for them: an HttpOnly cookie
+    with their credential ids (random, not personal data), the newest first."""
+    kept = list(dict.fromkeys(ids))[:DEVICE_PASSKEYS_MAX]
+    if not kept:
+        response.delete_cookie(
+            DEVICE_PASSKEYS_COOKIE, path="/v1", secure=settings.cookie_secure, samesite="lax"
+        )
+        return
+    response.set_cookie(
+        DEVICE_PASSKEYS_COOKIE,
+        ".".join(bytes_to_base64url(credential_id) for credential_id in kept),
+        httponly=True,
+        path="/v1",
+        max_age=DEVICE_PASSKEYS_SECONDS,
+        secure=settings.cookie_secure,
+        samesite="lax",
+    )
 
 
 def csrf_protect(request: Request) -> None:

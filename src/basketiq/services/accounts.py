@@ -14,7 +14,9 @@ from basketiq.domain.status import ActorType, UserRole
 from basketiq.services import audit
 from basketiq.storage import ObjectStorage, user_prefix
 
-PRIVACY_POLICY_VERSION = "2026-11-04"  # passkeys (spec 016): public key and dates
+PRIVACY_POLICY_VERSION = (
+    "2026-11-06"  # passkeys (spec 016): public key, dates; the phone keeps its passkey ids
+)
 
 
 def upsert_from_claims(db: Session, settings: Settings, claims: dict[str, Any]) -> tuple[User, bool]:

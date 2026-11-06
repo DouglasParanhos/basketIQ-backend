@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Cookie, Depends, Response
+from fastapi import APIRouter, Body, Cookie, Depends, Request, Response
 
 from basketiq.api.deps import (
     PASSKEY_COOKIE,
@@ -14,6 +14,8 @@ from basketiq.api.deps import (
     clear_passkey_challenge_cookie,
     clear_session_cookies,
     csrf_protect,
+    device_passkeys,
+    set_device_passkeys,
     set_passkey_challenge_cookie,
 )
 from basketiq.api.errors import ApiError, ErrorBody
@@ -119,6 +121,7 @@ def passkey_registration_options(
     summary="Register the passkey the phone created (body: the credential as JSON)",
 )
 def add_passkey(
+    request: Request,
     response: Response,
     credential: Annotated[dict[str, Any], Body()],
     db: Db,
@@ -133,6 +136,7 @@ def add_passkey(
     except passkeys.PasskeyError as exc:
         raise ApiError(400, exc.code, "Não foi possível registar a passkey. Tente novamente.") from exc
     clear_passkey_challenge_cookie(response, settings)
+    set_device_passkeys(response, settings, [passkey.credential_id, *device_passkeys(request)])
     return passkey
 
 
