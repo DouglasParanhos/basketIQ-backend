@@ -26,7 +26,11 @@ from basketiq.pipeline.parsers.base import COUNT_INFERRED_CONFIDENCE, MONEY, bui
 from basketiq.pipeline.schema import ParsedLine, TextLine
 
 _EURO = r"(?:\s*(?:€|EUR))?"
-_SUBTOTAL = re.compile(rf"^SUBTOTAL\s*:?\s+(?P<amount>{MONEY}){_EURO}$", re.I)
+# What a photo's OCR puts before a summary row ("· TOTAL", "- TOTAL PAGO", "1 TOTAL") and the letters it
+# confuses in "TOTAL" ("T0TAL", "TOTAI"): without them the summary is read as products (F-232).
+SUMMARY_NOISE = r"^[^\w(]*(?:\d\s+)?"
+TOTAL_WORD = r"T[O0]TA[LI1]"
+_SUBTOTAL = re.compile(rf"{SUMMARY_NOISE}SUB{TOTAL_WORD}\s*:?\s+(?P<amount>{MONEY}){_EURO}$", re.I)
 # Ways of paying with money, and ways of paying with something else: card balance, vouchers, deposit credit.
 _METHODS = (
     r"Multibanco|MB(?:\s*WAY)?|Cart[aã]o(?:\s+(?:de\s+)?(?:cr[eé]dito|d[eé]bito|banc[aá]rio))?|Visa|Mastercard|"

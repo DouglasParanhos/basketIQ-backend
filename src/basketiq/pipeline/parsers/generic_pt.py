@@ -52,6 +52,8 @@ from basketiq.pipeline.parsers.base import (
 from basketiq.pipeline.parsers.table import first_column_role, is_header_row, table_items
 from basketiq.pipeline.parsers.totals import (
     LOST_COMMA_BODY,
+    SUMMARY_NOISE,
+    TOTAL_WORD,
     LostComma,
     choose_total,
     recover_lost_comma,
@@ -94,14 +96,16 @@ _DISCOUNT = re.compile(
     rf"(?:[(-]\s*(?P<a1>{MONEY})\s*\)?|(?P<a2>{MONEY})\s*-)\s*(?:€|EUR)?$",
     re.I,
 )
-# An upside-down photo may add a stray character before the euro sign ("A PAGAR 97,37 7 €").
+# An upside-down photo may add a stray character before the euro sign ("A PAGAR 97,37 7 €"). "PAGD": a
+# photo's "PAGO" (F-232).
 _TOTAL = re.compile(
-    rf"^(?:TOTAL(?:\s+A\s+PAGAR|\s+COMPRA|\s+PAGO)?(?:\s+[A-Z])?|A\s+PAGAR)\s*:?\s+(?P<amount>{MONEY})"
-    rf"(?:\s+\S(?=\s*(?:€|EUR)))?{_EURO}$",
+    rf"{SUMMARY_NOISE}(?:{TOTAL_WORD}(?:\s+A\s+PAGAR|\s+COMPRA|\s+PAG[O0D])?(?:\s+[A-Z])?|A\s+PAGAR)"
+    rf"\s*:?\s+(?P<amount>{MONEY})(?:\s+\S(?=\s*(?:€|EUR)))?{_EURO}$",
     re.I,
 )
 _STOP = re.compile(
-    r"^(SUBTOTAL|TOTAL|A\s+PAGAR|IVA\b|TAXA|MULTIBANCO|NUMER[AÁ]RIO|TROCO|PAGAMENTO|Valor\s+dep[oó]sito)",
+    rf"{SUMMARY_NOISE}((?:SUB)?{TOTAL_WORD}|A\s+PAGAR|IVA\b|TAXA|MULTIBANCO|NUMER[AÁ]RIO|TROCO|PAGAMENTO|"
+    r"Valor\s+dep[oó]sito)",
     re.I,
 )
 # "3 X 2,69 8,07": quantity, unit price and line total, under the line that names the product

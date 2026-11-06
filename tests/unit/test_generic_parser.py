@@ -167,3 +167,23 @@ def test_a_weighed_line_survives_the_ocr_reading_g_as_zero() -> None:
         "kg",
         114,
     )
+
+
+PHARMACY = ["FARMACIA DA VILA", "Designacao Qtd Valor", "COLIRIO HIDRATANTE 10ML 12,49"]
+
+
+@pytest.mark.req("F-232")
+@pytest.mark.parametrize(
+    "summary",
+    [
+        ". TOTAL A PAGAR 12,49",  # a stray mark before the row
+        "- SUBTOTAL 12,49",
+        "1 TOTAL A PAGAR 12,49",  # a count before it
+        "T0TAL A PAGAR 12,49",  # letters the OCR confuses
+        "TOTAI PAGD 12,49",
+    ],
+)
+def test_the_summary_of_a_photo_is_never_read_as_products(summary: str) -> None:
+    receipt = parse([*PHARMACY, summary, "Multibanco 12,49"])
+    assert [line.raw_description for line in receipt.lines] == ["COLIRIO HIDRATANTE 10ML"]
+    assert receipt.total_cents == 1249
