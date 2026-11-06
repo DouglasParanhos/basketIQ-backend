@@ -14,7 +14,7 @@ from basketiq.domain.status import ActorType, UserRole
 from basketiq.services import audit
 from basketiq.storage import ObjectStorage, user_prefix
 
-PRIVACY_POLICY_VERSION = "2026-10-15"
+PRIVACY_POLICY_VERSION = "2026-11-04"  # passkeys (spec 016): public key and dates
 
 
 def upsert_from_claims(db: Session, settings: Settings, claims: dict[str, Any]) -> tuple[User, bool]:
@@ -29,10 +29,18 @@ def upsert_from_claims(db: Session, settings: Settings, claims: dict[str, Any]) 
     user.email = email
     name = claims.get("name") or claims.get("given_name")
     user.display_name = str(name)[:255] if name else None
-    user.role = UserRole.ADMIN if email in settings.admin_emails else UserRole.USER
-    user.last_login_at = datetime.now(UTC)
     db.flush()
     return user, created
+
+
+def record_sign_in(
+    db: Session, settings: Settings, user: User, method: str, *, first_login: bool = False
+) -> None:
+    """Every sign-in, Google or passkey: the date, the role (a change to BASKETIQ_ADMIN_EMAILS takes effect)
+    and the audit."""
+    user.role = UserRole.ADMIN if user.email in settings.admin_emails else UserRole.USER
+    user.last_login_at = datetime.now(UTC)
+    audit.record(db, "LOGIN", user_id=user.id, method=method, first_login=first_login)
 
 
 def accept_privacy(db: Session, user: User) -> None:

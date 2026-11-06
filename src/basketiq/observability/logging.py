@@ -33,6 +33,15 @@ REDACTED_KEYS = frozenset(
         "content",
         "password",
         "secret",
+        # passkeys (spec 016)
+        "credential",
+        "public_key",
+        "challenge",
+        "user_handle",
+        "client_data_json",
+        "attestation_object",
+        "authenticator_data",
+        "signature",
     }
 )
 

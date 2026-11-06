@@ -64,7 +64,8 @@ especificação são documentados com a razão (README e specs).
 - Backend Python 3.12 + FastAPI; PostgreSQL; fila Redis (Dramatiq); storage compatível com S3;
   OCR local PaddleOCR; LLM local via Agno + Ollama, opcional e desligado por omissão.
 - Frontend React + TypeScript como PWA; a API é consumida na mesma origem (BFF com cookies).
-- Autenticação exclusivamente Google OIDC fora dos ambientes local/teste; tokens de acesso curtos,
+- Autenticação com Google OIDC fora dos ambientes local/teste (cria e recupera a conta) e, como método
+  alternativo de entrada, passkeys WebAuthn registadas numa sessão já aberta (spec 016); tokens de acesso curtos,
   refresh rotativo e revogável, CSRF por header.
 - Metas: dashboard p95 < 2 s com 5 000 linhas; criação de upload p95 < 500 ms; processamento de nota
   comum p95 < 60 s.
@@ -86,4 +87,4 @@ nova versão (SemVer: MAJOR para remoção/redefinição de princípios, MINOR p
 secções, PATCH para clarificações) e revisão das specs afetadas. Revisões de código verificam a
 conformidade; complexidade adicional tem de ser justificada.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-15 | **Last Amended**: 2026-10-15
+**Version**: 1.1.0 | **Ratified**: 2026-10-15 | **Last Amended**: 2026-11-04

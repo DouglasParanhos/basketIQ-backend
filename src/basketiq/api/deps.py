@@ -22,6 +22,7 @@ ACCESS_COOKIE = "biq_at"
 REFRESH_COOKIE = "biq_rt"
 CSRF_COOKIE = "biq_csrf"
 STATE_COOKIE = "biq_oauth"
+PASSKEY_COOKIE = "biq_webauthn"  # id of the pending one-time passkey challenge
 CSRF_HEADER = "X-CSRF-Token"
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -88,6 +89,25 @@ def set_session_cookies(response: Response, settings: Settings, tokens: IssuedTo
 def clear_session_cookies(response: Response, settings: Settings) -> None:
     for name, path in ((ACCESS_COOKIE, "/"), (REFRESH_COOKIE, "/v1/auth"), (CSRF_COOKIE, "/")):
         response.delete_cookie(name, path=path, secure=settings.cookie_secure, samesite="lax")
+
+
+def set_passkey_challenge_cookie(
+    response: Response, settings: Settings, challenge_id: str, max_age: int
+) -> None:
+    # Path /v1 covers registration (/v1/me) and sign-in (/v1/auth). SameSite=Lax: not sent on cross-site POSTs
+    response.set_cookie(
+        PASSKEY_COOKIE,
+        challenge_id,
+        httponly=True,
+        path="/v1",
+        max_age=max_age,
+        secure=settings.cookie_secure,
+        samesite="lax",
+    )
+
+
+def clear_passkey_challenge_cookie(response: Response, settings: Settings) -> None:
+    response.delete_cookie(PASSKEY_COOKIE, path="/v1", secure=settings.cookie_secure, samesite="lax")
 
 
 def csrf_protect(request: Request) -> None:

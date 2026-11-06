@@ -142,6 +142,22 @@ default (`BASKETIQ_ADMIN_EMAILS`).
 Outside `local`/`test` the settings refuse any issuer other than Google, weak JWT secrets and
 non-secure cookies.
 
+### Passkeys (spec 016)
+
+After a Google sign-in, a person can register a passkey and then sign in with the phone's lock
+(fingerprint, face or PIN). The account is still created and recovered with Google.
+
+- The passkey domain (RP ID) is `BASKETIQ_WEBAUTHN_RP_ID`, by default the host of
+  `BASKETIQ_FRONTEND_BASE_URL`. The expected origin is `BASKETIQ_FRONTEND_BASE_URL` itself.
+- **Choose the final domain before the first real user**: changing the RP ID invalidates every
+  registered passkey. Future native Android/iOS apps will share passkeys through `assetlinks.json` and
+  `apple-app-site-association` on that same domain.
+- Outside `local`/`test` the settings refuse an IP address, `localhost`, or a domain that is not the
+  frontend host or a parent of it.
+- Browsers only offer passkeys on `localhost` or HTTPS with a domain name: an IP origin such as
+  `https://192.168.1.80` does not work. To test on a phone over the LAN, use a name like
+  `192-168-1-80.sslip.io` with a certificate for it.
+
 ### Optional local LLM
 
 Off by default. To use it: set `LLM_ENABLED: true` in `config/app-config.yaml`, run `make up-llm`

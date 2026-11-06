@@ -217,29 +217,30 @@ remover linhas com uma mão, selo "os totais batem", opção "só registar o tot
 
 ### User Story 7 - Checagem de descrição e alerta de unidade (D1) (Priority: P1)
 
-Uma foto lida por OCR não se confirma sozinha enquanto a descrição não for checada, e uma quantidade como
-"4,000" gera a pergunta "unidades ou kg?". Item novo, que o plano original não tinha.
+Uma foto lida por OCR não se confirma sozinha enquanto a descrição não for checada. Item novo, que o plano
+original não tinha. Uma quantidade como "4,000" gerava a pergunta "unidades ou kg?" (D1b); **retirada em
+2026-11-06**: cada talão Pingo Doce com padaria ia para revisão por causa dela, e no caso raro em que erra (uma
+balança parada num quilo exato) só a unidade fica errada, não os valores.
 
-**Alerta de unidade (D1b, FR-010), implementado no parser genérico.** Cenários:
+**Quantidade inteira impressa como peso (FR-010).** Cenários:
 
 1. **Given** uma linha com a quantidade impressa com três decimais e valor inteiro («QUEQUE 4,000 X 0,69»),
-   **When** o genérico a lê, **Then** a leitura mantém-se (4 × 0,69) mas a unidade fica em dúvida (confiança
-   0,5, abaixo de qualquer limiar) e a linha vai para revisão; quando só a unidade está em dúvida a razão
-   pergunta «unidades ou kg?». — F-38 ·
-   `tests/unit/test_unit_alert.py::test_whole_value_printed_like_a_weight_asks_units_or_kg`,
-   `tests/unit/test_unit_alert.py::test_confirming_the_unit_clears_the_alert_and_other_edits_do_not`
-2. **Given** um peso real («1,004»), uma unidade impressa («1,000 kg», «0,298 kg x …/kg») ou uma contagem
-   («3 X …»), **When** o genérico a lê, **Then** não há alerta. — F-38 ·
-   `tests/unit/test_unit_alert.py::test_a_real_weight_or_a_printed_unit_or_a_count_does_not_ask`
-3. **Given** a forma de duas linhas, a linha de quantidade solta ou uma coluna de quantidade, **When** a
-   quantidade é «4,000», **Then** há o mesmo alerta. — F-38 ·
-   `tests/unit/test_unit_alert.py::test_the_alert_also_covers_the_two_line_shape_and_a_quantity_line`,
-   `tests/unit/test_unit_alert.py::test_the_alert_also_covers_a_quantity_column`
-4. **Given** o alerta, **When** a pessoa confirma a unidade, **Then** o alerta desaparece; editar só a
-   quantidade não o limpa. — F-38 ·
-   `tests/unit/test_unit_alert.py::test_confirming_the_unit_clears_the_alert_and_other_edits_do_not`
+   **When** o genérico ou um parser calibrado a lê, **Then** lê 4 unidades × 0,69, sem dúvida na unidade e sem
+   ir para revisão por isso. — F-38 ·
+   `tests/unit/test_whole_quantity.py::test_whole_value_printed_like_a_weight_is_a_count_without_doubt`,
+   `tests/unit/test_whole_quantity.py::test_the_calibrated_pingo_doce_parser_reads_the_bakery_as_counts_and_weights_as_kg`
+2. **Given** um peso real («1,004») ou «kg» impresso («1,000 kg», «0,298 kg x …/kg»), **When** é lido, **Then**
+   a unidade é kg; uma contagem («3 X …», «4 un x …») é unidades. — F-38 ·
+   `tests/unit/test_whole_quantity.py::test_a_real_weight_or_a_printed_kg_is_a_weight_and_a_count_is_a_count`,
+   `tests/unit/test_whole_quantity.py::test_the_calibrated_continente_parser_reads_a_printed_kg_as_a_weight`
+3. **Given** a forma de duas linhas, a linha de quantidade solta, a contagem antes do nome (Aldi) ou uma coluna
+   de quantidade, **When** a quantidade é «4,000» ou «4», **Then** lê-se o mesmo. — F-38 ·
+   `tests/unit/test_whole_quantity.py::test_the_two_line_shape_and_a_quantity_line_read_a_whole_value_as_a_count`,
+   `tests/unit/test_whole_quantity.py::test_a_quantity_column_reads_a_whole_value_as_a_count`
 
-5. **Given** uma nota lida por OCR (foto, captura ou PDF digitalizado), mesmo com confiança alta e totais
+**Checagem de descrição (D1a).** Cenários:
+
+4. **Given** uma nota lida por OCR (foto, captura ou PDF digitalizado), mesmo com confiança alta e totais
    conciliados, **When** é processada, **Then** vai para revisão com o motivo `photo_not_verified` e a pessoa
    pode confirmá-la; um PDF de texto de cadeia calibrada continua a poder confirmar-se sozinho. **Regra
    provisória, decidida em 2026-10-30: sai com a checagem de descrição (D1a).** — F-55 ·
@@ -289,8 +290,9 @@ A checagem de descrição (D1a) fica para depois do A2.2.
 - **FR-009 (baseline)**: a baseline regista o commit (`HEAD`), o resumo de `git status --short`, o hash de
   `git diff HEAD` e a lista de ficheiros não rastreados, para se saber que árvore foi medida. Não se criam
   refs nem commits para a guardar; para reproduzir o número exato faz-se commit antes (com `/simplify`).
-- **FR-010 (alerta de unidade)**: uma quantidade impressa com três decimais e valor inteiro MUST gerar o
-  alerta de unidade e enviar a linha para revisão (D1b).
+- **FR-010 (quantidade inteira impressa como peso)**: uma quantidade impressa com três decimais e valor
+  inteiro, sem «kg» impresso, MUST ler-se como unidades e MUST NOT enviar a linha para revisão por causa da
+  unidade. Substitui, em 2026-11-06, o alerta de unidade (D1b), que mandava rever.
 
 ### Key Entities
 
@@ -322,6 +324,8 @@ texto exato e o OCR de foto não.
   desconhecidas: a conferência de totais não vê erros de descrição (Auchan e Mercadona na medição do A0).
   (b) **Alerta de unidade**: quantidade impressa com três decimais e valor inteiro (ex.: "4,000") vai para
   revisão com a pergunta "unidades ou kg?". É barato e determinístico e apanha o caso do queque.
+  **Retirado em 2026-11-06:** mandava rever todo o talão Pingo Doce com padaria; a quantidade lê-se como
+  unidades sem alerta (FR-010).
   (c) **PDF com texto** de cadeia calibrada pode ser confirmado automaticamente se os totais baterem e não
   houver alerta. Para loja desconhecida mantém-se: sempre revisão na 1.ª nota; a partir da 2.ª só com totais
   certos, QR coincidente (se existir) e perfil já confirmado por uma pessoa.
@@ -356,6 +360,7 @@ relatório do fluxo. Alimentam os fluxos indicados.
   **Atualização (2026-10-31):** um valor inteiro com três decimais e sem "kg" impresso passa a ler-se como
   unidades (uma balança pára num quilo exato cerca de uma vez em mil pesagens); o alerta de unidade (D1b)
   mantém-se e a linha continua a ir para revisão.
+  **Atualização (2026-11-06):** o alerta de unidade (D1b) sai; estas linhas já não mandam o talão para revisão.
 - **Tempo (A7)**: cada foto demorou entre 39 s e 71 s (média 54,5 s, máximo 71,4 s no `--unseen`; média
   54,1 s, máximo 68,2 s no modo normal), medido em Docker Desktop no Windows (16 CPUs, 8 GB), com os
   contentores do projeto parados e mais nada a correr: não é a máquina-alvo de 4 vCPU. Os PDF com texto

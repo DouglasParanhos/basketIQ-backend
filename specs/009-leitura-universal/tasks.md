@@ -37,6 +37,8 @@ Só o A0. Os fluxos A1 a A7 não começam sem a linha de base e a confirmação 
 
 - [x] T017 `flag_ambiguous_unit` em `parsers/base.py`, usado pelo genérico e pela tabela; `unit` entra na
   decisão de revisão (`domain/confidence.py`); F-38
+- [x] T017b (2026-11-06) Alerta retirado: `flag_ambiguous_unit` sai, «kg» impresso passa a decidir a unidade em
+  `build_item` (`kg_printed`); testes em `tests/unit/test_whole_quantity.py`; F-38
 - [x] T018 Guardar a baseline do A0 como `baseline_unseen_A0.json` (histórico, sem uso na verificação) e
   regenerar `baseline_unseen.json` com o código novo
 

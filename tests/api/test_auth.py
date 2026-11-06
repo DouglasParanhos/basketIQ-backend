@@ -135,7 +135,14 @@ def test_wrong_audience_or_nonce_is_rejected(client: TestClient, idp: FakeIdP) -
 def test_no_password_or_other_login_method_exists(client: TestClient) -> None:
     paths = client.app.openapi()["paths"]  # type: ignore[attr-defined]
     auth_paths = {p for p in paths if p.startswith("/v1/auth")}
-    assert auth_paths == {"/v1/auth/login", "/v1/auth/callback", "/v1/auth/refresh", "/v1/auth/logout"}
+    assert auth_paths == {
+        "/v1/auth/login",
+        "/v1/auth/callback",
+        "/v1/auth/refresh",
+        "/v1/auth/logout",
+        "/v1/auth/passkey/options",  # passkeys (spec 016), only for existing accounts
+        "/v1/auth/passkey/verify",
+    }
     assert client.post("/v1/auth/password", json={"email": "a", "password": "b"}).status_code in (
         403,
         404,
