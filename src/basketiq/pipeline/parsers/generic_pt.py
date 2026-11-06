@@ -42,7 +42,6 @@ from basketiq.pipeline.parsers.base import (
     build_item,
     choose_purchase_datetime,
     count_from_total,
-    flag_ambiguous_unit,
     guess_merchant_name,
     is_weight_quantity,
     one_letter_apart,
@@ -194,7 +193,8 @@ class GenericPtParser:
         pending_tax: str | None = None  # the "(A)" printed before that description
         pending_amount: TextLine | None = None  # a price alone on its row, waiting for its description
         pending_saving: tuple[int, float] | None = None  # a saving printed before its item (see below)
-        pending_weighed: tuple[re.Match[str], TextLine] | None = None  # a weighed line whose name comes next
+        # A weighed line (or a count) whose name comes next, and whether it printed "kg".
+        pending_weighed: tuple[re.Match[str], TextLine, bool] | None = None
         savings_first = _savings_first(zone)
 
         def add(item: ParsedLine) -> None:
@@ -222,9 +222,13 @@ class GenericPtParser:
                 nxt = _text(zone[n + 1]) if n + 1 < len(zone) else ""
                 own_prices = _is_qty_total(nxt) or bool(_QTY_LINE.match(nxt))  # the name of another item
                 if _names_a_product(text) and not own_prices:
-                    wm, wline = pending_weighed
+                    wm, wline, kg = pending_weighed
                     pending_weighed = None
-                    add(_weighed_item(wm, text, min(wline.confidence, line.confidence), [_text(wline), text]))
+                    add(
+                        _weighed_item(
+                            wm, text, min(wline.confidence, line.confidence), [_text(wline), text], kg
+                        )
+                    )
                     continue
                 flush_weighed()
             if _CATEGORY.match(text):  # a section title: it names no product
@@ -245,9 +249,13 @@ class GenericPtParser:
                         unresolved_line(line)
                     )  # "e/kg" is a euro sign only if the arithmetic agrees
                 elif description:
-                    add(_weighed_item(m, description, line.confidence, [description, text]))
+                    add(_weighed_item(m, description, line.confidence, [description, text], kg_printed=True))
                 elif _weight_closes(m):
-                    pending_weighed = (m, line)  # the name is the next row; without it, it is left for review
+                    pending_weighed = (
+                        m,
+                        line,
+                        True,
+                    )  # the name is the next row; without it, it is left for review
                 else:
                     parsed.append(unresolved_line(line))
                 pending_description = pending_tax = None
@@ -270,7 +278,7 @@ class GenericPtParser:
                 # "4 x 0,14 € 0,56 € 1" with no name before it: a count printed before its item (Aldi), whose
                 # total a tilt lifted onto the count's row. Like a weighed line, it waits for the next name.
                 flush_weighed()
-                pending_weighed = (m, line)
+                pending_weighed = (m, line, False)
                 continue
             if (m := _LOST_COUNT.match(text)) and pending_description:
                 add(_item_with_lost_count(pending_description, m, pending_tax, line, text))
@@ -327,14 +335,16 @@ class GenericPtParser:
         return parsed
 
 
-def _weighed_item(m: re.Match[str], description: str, line_conf: float, evidence: list[str]) -> ParsedLine:
+def _weighed_item(
+    m: re.Match[str], description: str, line_conf: float, evidence: list[str], kg_printed: bool
+) -> ParsedLine:
     return build_item(
         description=description,
         total_text=m.group("total"),
         qty_text=m.group("qty"),
         unit_price_text=m.group("unit"),
         weight_unit=Unit.KG,
-        unit_printed=True,  # the weighed line says kg
+        kg_printed=kg_printed,
         line_conf=line_conf,
         evidence=evidence,
     )
@@ -529,7 +539,7 @@ def _item(m: re.Match[str], line: TextLine, text: str, from_ocr: bool = False) -
         total_text=m.group("total"),
         qty_text=qty,
         unit_price_text=unit if qty else None,
-        unit_printed=bool(m.group("qunit")),
+        kg_printed=m.group("qunit") == "kg",
         line_conf=line.confidence,
         evidence=[text],
     )
@@ -594,4 +604,3 @@ def _apply_quantity(item: ParsedLine, qty_line: re.Match[str], conf: float, evid
     item.unit_price_cents = parse_money_cents(qty_line.group("unit"))
     item.field_confidence["quantity"] = item.field_confidence["unit_price"] = round(RULE_EXACT * conf, 3)
     item.evidence.append(evidence)
-    flag_ambiguous_unit(item, qty_line.group("qty"), bool(qty_line.group("kg")))

@@ -113,7 +113,6 @@ def _join_reason(note: dict[str, Any]) -> ReviewReason:
 
 # Why a line is reviewed when only one of its fields is in doubt.
 _ONE_FIELD_IN_DOUBT: dict[tuple[str, ...], str] = {
-    ("unit",): "Unidade por confirmar: são unidades ou kg?",
     ("quantity",): "Quantidade por confirmar: não está impressa, foi deduzida do total.",
 }
 
@@ -199,7 +198,7 @@ def evaluate(view: ReceiptView, thresholds: Thresholds) -> Evaluation:
                     message="Preço da linha em falta.",
                 )
             )
-        for name in ("description", "quantity", "unit", "unit_price", "line_total", "discount"):
+        for name in ("description", "quantity", "unit_price", "line_total", "discount"):
             if name not in line.field_confidence and name not in line.edited_fields:
                 continue
             c = _effective(line.field_confidence, name, line.edited_fields)

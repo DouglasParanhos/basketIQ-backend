@@ -25,7 +25,6 @@ RULE_DESCRIPTION = 0.95
 
 MONEY = r"\d{1,4}[,.]\d{2}"
 
-UNIT_ALERT_CONFIDENCE = 0.5  # a unit in doubt: below every review threshold
 COUNT_INFERRED_CONFIDENCE = 0.5  # a count that was worked out from the amounts, not printed: reviewed
 _WHOLE_WEIGHT = re.compile(r"\d+[,.]000")
 
@@ -134,10 +133,10 @@ def build_item(
     tax_code: str | None = None,
     weight_unit: str = Unit.KG,
     implicit_qty_rule: float = RULE_IMPLICIT_QTY,
-    unit_printed: bool = False,
+    kg_printed: bool = False,
 ) -> ParsedLine:
-    """Build a ParsedLine from the textual parts of an item and score each field. `unit_printed` says the
-    line writes the unit ("kg") next to the quantity."""
+    """Build a ParsedLine from the textual parts of an item and score each field. `kg_printed` says the
+    line writes "kg" next to the quantity, so even a whole value ("1,000 kg") is a weight."""
     total = parse_money_cents(total_text)
     qty: Decimal | None
     unit: str
@@ -145,7 +144,7 @@ def build_item(
     if qty_text is not None and unit_price_text is not None:
         qty = parse_decimal(qty_text)
         unit_price = parse_money_cents(unit_price_text)
-        unit = weight_unit if is_weight_quantity(qty_text) else Unit.UNIT
+        unit = weight_unit if is_weight_quantity(qty_text, kg_printed) else Unit.UNIT
         consistent = (
             qty is not None
             and unit_price is not None
@@ -171,7 +170,7 @@ def build_item(
     conf["description"] = RULE_DESCRIPTION * line_conf
     if total is None:
         conf["line_total"] = 0.0
-    item = ParsedLine(
+    return ParsedLine(
         raw_description=_clean_description(description),
         quantity=qty,
         unit=unit,
@@ -181,9 +180,6 @@ def build_item(
         field_confidence={k: round(v, 3) for k, v in conf.items()},
         evidence=evidence,
     )
-    if qty_text is not None and unit_price_text is not None:
-        flag_ambiguous_unit(item, qty_text, unit_printed)
-    return item
 
 
 def one_letter_apart(a: str, b: str) -> bool:
@@ -228,14 +224,6 @@ def apply_deposit_quantities(lines: Iterable[ParsedLine]) -> None:
         # A total that is not a whole number of deposits is rounded but must still be reviewed.
         conf = RULE_INCONSISTENT if remainder else line.field_confidence.get("line_total", 0.0)
         line.field_confidence["quantity"] = line.field_confidence["unit_price"] = round(conf, 3)
-
-
-def flag_ambiguous_unit(item: ParsedLine, qty_text: str | None, unit_printed: bool = False) -> None:
-    """ "4,000 X 0,69": a quantity printed like a weighed one but with a whole value. Units or kg? Nothing in
-    the line says, so the unit is put in doubt and the line goes to review (spec 009, D1b). A unit printed
-    next to the quantity ("1,000 kg") settles it, and so does a real weight ("1,004")."""
-    if qty_text and not unit_printed and _WHOLE_WEIGHT.fullmatch(qty_text.strip()):
-        item.field_confidence["unit"] = UNIT_ALERT_CONFIDENCE
 
 
 def unresolved_line(line: TextLine) -> ParsedLine:
@@ -295,7 +283,8 @@ def index_of(lines: list[TextLine], predicate: Callable[[str], bool], start: int
 def is_weight_quantity(qty_text: str, kg_printed: bool = False) -> bool:
     """Weighed quantities are printed with decimals ("0,513", "1,004 kg"), counts without ("2"). A whole value
     printed like a weight ("4,000 X 0,69", the Pingo Doce bakery) is read as a count unless "kg" is printed:
-    a scale stops on a whole kilo about once in a thousand weighings. The unit alert still asks (D1b)."""
+    a scale stops on a whole kilo about once in a thousand weighings, and then only the unit is wrong, not the
+    amounts, so the line is not sent to review for it (spec 009, D1b withdrawn on 2026-11-06)."""
     text = qty_text.strip()
     return kg_printed or (("," in text or "." in text) and not _WHOLE_WEIGHT.fullmatch(text))
 

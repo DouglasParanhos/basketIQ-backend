@@ -108,7 +108,7 @@ class ContinenteParser:
                         total_text=m.group("total"),
                         qty_text=m.group("qty"),
                         unit_price_text=m.group("unit"),
-                        unit_printed=bool(m.group("kg")),
+                        kg_printed=bool(m.group("kg")),
                         tax_code=pending_name.group("tax"),
                         line_conf=min(line.confidence, name_line.confidence),
                         evidence=[name_line.text.strip(), text],

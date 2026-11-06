@@ -85,7 +85,7 @@ class LidlParser:
                         total_text=m.group("total"),
                         qty_text=m.group("qty"),
                         unit_price_text=m.group("unit"),
-                        unit_printed=bool(m.group("kg")),
+                        kg_printed=bool(m.group("kg")),
                         tax_code=_vat_class(m.group("tax")),
                         line_conf=line.confidence * UNCALIBRATED,
                         evidence=[pending_description or "", text],
