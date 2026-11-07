@@ -32,8 +32,15 @@ TEXT_MAX_INK = 0.5  # of the photo: more 'ink' than this is no text on paper
 TEXT_DESK_GAP = 15  # grey levels: marks this close to the desk's own grey are not text
 TEXT_MIN_INK = 0.003  # of a row (column): less ink than this is a speck on the desk, not text
 PAPER_TEXT_GAP = 7  # probe pixels: dark gaps (printed text) up to this wide do not split the paper
+PAPER_INSIDE_BRIGHT = 0.75  # a bright box this much smaller than the first: the paper on a light surface
+# Of that box bright, or it is the grain of a white desk (a paper on a fleece: 0.75, the grain: 0.2).
+PAPER_SOLID = 0.5
+SHOW_THROUGH = 0.88  # of the paper's brightness around it: lighter marks (the back's print) are washed out
+INK_LEVEL = 0.35  # of the paper's brightness: darker is black
+PAPER_LIGHT_WINDOW = 7  # pixels of a quarter-size tile: wider than a stroke, so its maximum is the paper
 
 Quad = tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]]
+Box = tuple[int, int, int, int]  # left, top, right, bottom
 
 TILE_WIDTH = 900  # a narrower receipt is enlarged to this before it is sliced
 TILE_MAX_WIDTH = 1400  # a wider one keeps its pixels up to this: shrinking a sharp photo misreads digits
@@ -63,8 +70,9 @@ def rasterize_pdf(data: bytes, dpi: int = 200) -> list[Image.Image]:
         pdf.close()
 
 
-def prepare_for_ocr(image: Image.Image) -> Image.Image:
-    """Upscale narrow receipts (screenshots are often ~300 px wide) and bound very large photos."""
+def prepare_for_ocr(image: Image.Image, wash: bool = False) -> Image.Image:
+    """Upscale narrow receipts (screenshots are often ~300 px wide) and bound very large photos. `wash`: see
+    `ocr_tiles`."""
     img = image
     width, height = img.size
     if width < TARGET_MIN_WIDTH:
@@ -75,7 +83,32 @@ def prepare_for_ocr(image: Image.Image) -> Image.Image:
     elif max(width, height) > MAX_SIDE:
         img = img.copy()
         img.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
-    return ImageOps.autocontrast(img, cutoff=1)
+    return _contrast(img, wash)
+
+
+def _contrast(image: Image.Image, wash: bool) -> Image.Image:
+    return _level_ink(image) if wash else ImageOps.autocontrast(image, cutoff=1)
+
+
+def _level_ink(image: Image.Image) -> Image.Image:
+    """The print on white: each pixel is measured against the paper's brightness around it, so an uneven
+    light (a shadow, a crease) is flattened, and marks much lighter than the ink are washed out. Thin paper
+    shows the print on its back through it, mirrored and light grey; read as text, it is glued onto the
+    rows ("SALADA ICEBERGUE sinigo\\vq.ibilms") and hides the prices under it. A faded print or one blurred
+    by enlarging is as light, and goes too: this is a second look, not the first (see the orchestrator)."""
+    gray = image.convert("L")
+    paper = (
+        gray.reduce(4)
+        .filter(ImageFilter.MaxFilter(PAPER_LIGHT_WINDOW))
+        .filter(ImageFilter.GaussianBlur(PAPER_LIGHT_WINDOW))
+        .resize(gray.size, Image.Resampling.BILINEAR)
+    )
+    level = np.asarray(gray, np.float32)  # in place from here on: a whole photo is 12 Mpx
+    level /= np.maximum(np.asarray(paper, np.float32), 1)
+    level -= INK_LEVEL
+    level *= 255 / (SHOW_THROUGH - INK_LEVEL)
+    np.clip(level, 0, 255, out=level)
+    return Image.fromarray(level.astype(np.uint8)).convert("RGB")
 
 
 @dataclass(frozen=True)
@@ -104,7 +137,7 @@ def _gray_probe(image: Image.Image) -> tuple[np.ndarray, float]:
     return np.asarray(probe.convert("L"), dtype=np.uint8), scale
 
 
-def _paper_box(bright: np.ndarray) -> tuple[int, int, int, int] | None:
+def _paper_box(bright: np.ndarray) -> Box | None:
     """(left, top, right, bottom) of the paper in the probe, or None when there is no clear paper."""
     fill = bright.mean(axis=0)
     cols = np.flatnonzero(fill > PAPER_MIN_FILL * fill.max())
@@ -117,19 +150,44 @@ def _paper_box(bright: np.ndarray) -> tuple[int, int, int, int] | None:
     return left, int(rows[0]), right, int(rows[-1]) + 1
 
 
-def _plausible_area(area: float, image: Image.Image) -> bool:
-    return PAPER_MIN_AREA * image.width * image.height <= area <= PAPER_MAX_AREA * image.width * image.height
+def _plausible_area(area: float, pixels: int) -> bool:
+    """Whether `area` is a plausible share of a photo of `pixels` pixels for a receipt."""
+    return PAPER_MIN_AREA * pixels <= area <= PAPER_MAX_AREA * pixels
 
 
 def crop_to_paper(image: Image.Image) -> Image.Image:
     """Crop a photographed receipt to the bright paper, without straightening it (what `flatten_paper` does
     for a receipt that stands straight). When no clear paper is found the image is returned unchanged."""
     gray, scale = _gray_probe(image)
-    found = _paper_box(gray > _otsu_threshold(gray))
+    _, found = _paper_threshold(gray)
     return (_crop(image, found, scale) if found else None) or image
 
 
-def _crop(image: Image.Image, found: tuple[int, int, int, int], scale: float) -> Image.Image | None:
+def _paper_threshold(gray: np.ndarray) -> tuple[int, Box | None]:
+    """The grey level between the paper and what is around it, and the paper's box at that level. Otsu's
+    threshold splits the dark from the bright; on a light surface (a white fleece) the paper and the surface
+    both fall on the bright side, so Otsu's threshold of that side is tried too, to separate the paper, the
+    brightest thing, from the surface. It is taken when it finds a plausible paper much smaller than the
+    first threshold does, and solid: on a white desk it only picks out the brightest grains of the desk."""
+    threshold = _otsu_threshold(gray)
+    brighter = _otsu_threshold(gray[gray > threshold])
+    first, second = _paper_box(gray > threshold), _paper_box(gray > brighter)
+    if (
+        first is not None
+        and second is not None
+        and _plausible_area(_box_area(second), gray.size)
+        and _box_area(second) < PAPER_INSIDE_BRIGHT * _box_area(first)
+        and (gray[second[1] : second[3], second[0] : second[2]] > brighter).mean() >= PAPER_SOLID
+    ):
+        return brighter, second
+    return threshold, first
+
+
+def _box_area(box: Box) -> int:
+    return (box[2] - box[0]) * (box[3] - box[1])
+
+
+def _crop(image: Image.Image, found: Box, scale: float) -> Image.Image | None:
     """The paper `found` in the probe (shrunk by `scale`) cut out of `image` with a margin, or None when that
     is not a plausible share of the photo."""
     left, top, right, bottom = found
@@ -140,7 +198,7 @@ def _crop(image: Image.Image, found: tuple[int, int, int, int], scale: float) ->
         min(image.width, round((right + pad_x) / scale)),
         min(image.height, round((bottom + pad_y) / scale)),
     )
-    return image.crop(box) if _plausible_area((box[2] - box[0]) * (box[3] - box[1]), image) else None
+    return image.crop(box) if _plausible_area(_box_area(box), image.width * image.height) else None
 
 
 def _edge_fit(ys: np.ndarray, xs: np.ndarray) -> tuple[float, float, float]:
@@ -154,7 +212,7 @@ def _edge_fit(ys: np.ndarray, xs: np.ndarray) -> tuple[float, float, float]:
     return float(slope), float(offset), float(np.median(residual[keep]))
 
 
-def _paper_quad(bright: np.ndarray, box: tuple[int, int, int, int]) -> Quad | None:
+def _paper_quad(bright: np.ndarray, box: Box) -> Quad | None:
     """Corners (top-left, top-right, bottom-right, bottom-left) of a standing receipt in the probe.
 
     Each row crosses the paper once: its longest bright run gives a point of the left and of the right
@@ -213,9 +271,8 @@ def flatten_paper(image: Image.Image) -> Image.Image:
     cropped exactly like `crop_to_paper`. Without a clear paper (a receipt on a white desk, a screenshot) the
     photo is only turned so that its text runs level."""
     gray, scale = _gray_probe(image)
-    threshold = _otsu_threshold(gray)
-    box = _paper_box(gray > threshold)
-    if box is None or not _plausible_area((box[2] - box[0]) * (box[3] - box[1]) / scale**2, image):
+    threshold, box = _paper_threshold(gray)
+    if box is None or not _plausible_area(_box_area(box) / scale**2, image.width * image.height):
         return _level_text(image, gray, threshold)
     left, top, right, bottom = box
     if right - left > bottom - top:  # paper lying sideways: stand it up first
@@ -233,7 +290,7 @@ def flatten_paper(image: Image.Image) -> Image.Image:
     width = float(max(np.linalg.norm(tr - tl), np.linalg.norm(br - bl)))
     height = float(max(np.linalg.norm(bl - tl), np.linalg.norm(br - tr)))
     turned = max(abs(tr[1] - tl[1]) / width, abs(bl[0] - tl[0]) / height, abs(br[0] - tr[0]) / height)
-    if turned < PAPER_STRAIGHT or not _plausible_area(width * height, image):
+    if turned < PAPER_STRAIGHT or not _plausible_area(width * height, image.width * image.height):
         return _crop(image, box, scale) or _level_text(image, gray, threshold)
     pad_x, pad_y = PAPER_PADDING * width, PAPER_PADDING * height
     size = (round(width + 2 * pad_x), round(height + 2 * pad_y))
@@ -289,7 +346,7 @@ def _level_text(image: Image.Image, gray: np.ndarray, threshold: int) -> Image.I
         min(image.width, round((right + pad_x) * to_image)),
         min(image.height, round((bottom + pad_y) * to_image)),
     )
-    area = (box[2] - box[0]) * (box[3] - box[1])
+    area = _box_area(box)
     return image.crop(box) if 0 < area <= TEXT_CROP_MAX * image.width * image.height else image
 
 
@@ -309,18 +366,19 @@ def tile_spans(width: int, height: int) -> list[tuple[int, int, float, float]]:
     return [(t, t + tile_height, owns[0][i], owns[1][i]) for i, t in enumerate(tops)]
 
 
-def ocr_tiles(paper: Image.Image) -> list[OcrTile]:
+def ocr_tiles(paper: Image.Image, wash: bool = False) -> list[OcrTile]:
     """What to feed the OCR for the paper of one page (see `flatten_paper`): the whole of it or, when it is
-    a long receipt, overlapping slices at a resolution where the text lines stay apart."""
+    a long receipt, overlapping slices at a resolution where the text lines stay apart. `wash`: the back's
+    print showing through is washed out (`_level_ink`) instead of the contrast only being stretched."""
     width, height = paper.size
     if height <= width * TILE_MAX_ASPECT:
-        return [OcrTile(prepare_for_ocr(paper), 0, 0.0, math.inf)]
+        return [OcrTile(prepare_for_ocr(paper, wash), 0, 0.0, math.inf)]
     target = min(max(width, TILE_WIDTH), TILE_MAX_WIDTH)
     if target != width:
         paper = paper.resize((target, round(height * target / width)), Image.Resampling.LANCZOS)
     return [
         OcrTile(
-            ImageOps.autocontrast(paper.crop((0, top, paper.width, bottom)), cutoff=1),
+            _contrast(paper.crop((0, top, paper.width, bottom)), wash),
             top,
             own_top,
             own_bottom,

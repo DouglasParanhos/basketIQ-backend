@@ -26,6 +26,7 @@ RULE_DESCRIPTION = 0.95
 MONEY = r"\d{1,4}[,.]\d{2}"
 
 COUNT_INFERRED_CONFIDENCE = 0.5  # a count that was worked out from the amounts, not printed: reviewed
+PAIRED_CONFIDENCE = 0.7  # a price joined to a description that was on another row: always reviewed
 _WHOLE_WEIGHT = re.compile(r"\d+[,.]000")
 
 DEPOSIT_CENTS = 10  # current deposit per bottle in the Portuguese return scheme
@@ -53,18 +54,27 @@ _PT_MONTHS = {
     )
 }
 _PT_MONTH = "|".join(name.replace("o", "[o0]") for name in _PT_MONTHS)
+# The dash of a date, which the OCR may double or read as a space ("2026-11--03", "2026 11-03", "26--10-24").
+_DATE_DASH = r"[-\s]{1,2}"
 
 
 def parse_date_candidates(lines: Iterable[TextLine]) -> list[DateCandidate]:
     """Collect every plausible date/time printed on the receipt. Invalid dates (e.g. an OCR
     misread month 18) are dropped instead of guessed."""
     patterns: list[tuple[re.Pattern[str], str]] = [
-        (re.compile(r"(?P<y>20\d{2})-(?P<m>\d{2})-(?P<d>\d{2})(?:\s+(?P<H>\d{2}):(?P<M>\d{2}))?"), "iso"),
+        (
+            re.compile(
+                rf"(?P<y>20\d{{2}}){_DATE_DASH}(?P<m>\d{{2}}){_DATE_DASH}(?P<d>\d{{2}})"
+                r"(?:\s+(?P<H>\d{2}):(?P<M>\d{2}))?"
+            ),
+            "iso",
+        ),
         (re.compile(r"(?P<d>\d{2})/(?P<m>\d{2})/(?P<y>20\d{2})(?:\s+(?P<H>\d{2}):(?P<M>\d{2}))?"), "dmy"),
         (re.compile(r"\b(?P<d>\d{2})\.(?P<m>\d{2})\.(?P<y>\d{2})\s+(?P<H>\d{2}):(?P<M>\d{2})"), "dmy2"),
-        # The OCR sometimes doubles a dash ("26--10-24").
         (
-            re.compile(r"^(?P<y>\d{2})-{1,2}(?P<m>\d{2})-{1,2}(?P<d>\d{2})\s+(?P<H>\d{2}):(?P<M>\d{2})"),
+            re.compile(
+                rf"^(?P<y>\d{{2}}){_DATE_DASH}(?P<m>\d{{2}}){_DATE_DASH}(?P<d>\d{{2}})\s+(?P<H>\d{{2}}):(?P<M>\d{{2}})"
+            ),
             "ymd2",
         ),
         # "24/out/26 16:50" (El Corte Inglés); the OCR may read the "o" of "out" as a zero.
@@ -224,6 +234,13 @@ def apply_deposit_quantities(lines: Iterable[ParsedLine]) -> None:
         # A total that is not a whole number of deposits is rounded but must still be reviewed.
         conf = RULE_INCONSISTENT if remainder else line.field_confidence.get("line_total", 0.0)
         line.field_confidence["quantity"] = line.field_confidence["unit_price"] = round(conf, 3)
+
+
+def as_paired(item: ParsedLine) -> ParsedLine:
+    """`item` made of a description and a price the OCR read on two rows: the pairing is a guess, so the
+    line is reviewed."""
+    item.field_confidence = {k: min(v, PAIRED_CONFIDENCE) for k, v in item.field_confidence.items()}
+    return item
 
 
 def unresolved_line(line: TextLine) -> ParsedLine:

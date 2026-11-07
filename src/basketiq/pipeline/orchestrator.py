@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from PIL import Image
@@ -25,6 +26,7 @@ from basketiq.pipeline.ocr import OcrEngine
 from basketiq.pipeline.ocr.base import OcrUnavailableError
 from basketiq.pipeline.parsers import parser_for
 from basketiq.pipeline.parsers.base import Parser, apply_deposit_quantities
+from basketiq.pipeline.parsers.totals import adds_up
 from basketiq.pipeline.pdf_text import extract_pdf_text, has_usable_text
 from basketiq.pipeline.preprocess import flatten_paper, load_image, ocr_tiles, rasterize_pdf
 from basketiq.pipeline.qr import (
@@ -154,9 +156,7 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
         out.page_count += 1
 
     with stage("text"):
-        docs = [_extract_text(request.data, validated.source_type, deps.ocr, out)]
-        docs += [_extract_text(data, SourceType.IMAGE, deps.ocr, out) for data, _ in request.extra]
-        doc, out.join_notes = join_documents(docs)
+        doc, out.join_notes, papers = _read_document(request, validated.source_type, deps.ocr, out)
 
     with stage("qr"):
         out.qr = _find_qr(request, validated.source_type, deps)
@@ -172,9 +172,24 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
         return out
 
     with stage("parse"):
-        parsed = deps.parser_factory(merchant).parse(doc)
-        apply_deposit_quantities(parsed.lines)
-        parsed.field_confidence["merchant"] = classification.confidence
+        parsed = _parse(deps, merchant, doc, classification.confidence)
+
+    if out.route == ProcessingRoute.LOCAL_OCR and not adds_up(parsed.lines, parsed.total_cents):
+        # Thin paper may show the print on its back, read into the rows: a second look with it washed out,
+        # taken only when its lines add up to the total (it also washes out a faded print).
+        with stage("wash"):
+            try:
+                washed, notes = join_documents(
+                    [_ocr_document(deps.ocr, pages, wash=True) for pages in papers]
+                )
+                again = _parse(deps, merchant, washed, classification.confidence)
+            except TemporaryProcessingError:  # a failed second look leaves the first reading
+                pass
+            else:
+                if adds_up(again.lines, again.total_cents):
+                    doc, parsed, out.join_notes = washed, again, notes
+                    out.ocr_mean_confidence = round(washed.mean_confidence, 3)
+                    out.notes.append("show_through_washed")
 
     if deps.resolver is not None:
         with stage("llm"):
@@ -204,39 +219,80 @@ def run_pipeline(request: PipelineRequest, deps: PipelineDeps) -> PipelineOutcom
     return out
 
 
-def _extract_text(data: bytes, source_type: SourceType, ocr: OcrEngine, out: PipelineOutcome) -> DocumentText:
+def _read_document(
+    request: PipelineRequest, source_type: SourceType, ocr: OcrEngine, out: PipelineOutcome
+) -> tuple[DocumentText, list[JoinNote], list[list[Image.Image]]]:
+    """The text of the document, every photo of it joined, and the upright papers of each file it was read
+    from (none for a PDF's text layer)."""
+    readings = [_extract_text(request.data, source_type, ocr, out)]
+    readings += [_extract_text(data, SourceType.IMAGE, ocr, out) for data, _ in request.extra]
+    doc, notes = join_documents([doc for doc, _ in readings])
+    return doc, notes, [papers for _, papers in readings]
+
+
+def _parse(
+    deps: PipelineDeps, merchant: Merchant, doc: DocumentText, merchant_confidence: float
+) -> ParsedReceipt:
+    parsed = deps.parser_factory(merchant).parse(doc)
+    apply_deposit_quantities(parsed.lines)
+    parsed.field_confidence["merchant"] = merchant_confidence
+    return parsed
+
+
+def _extract_text(
+    data: bytes, source_type: SourceType, ocr: OcrEngine, out: PipelineOutcome
+) -> tuple[DocumentText, list[Image.Image]]:
+    """The text of one file, and the upright paper of each of its pages when it was read by OCR."""
     if source_type == SourceType.PDF:
         doc = extract_pdf_text(data)
         if has_usable_text(doc):
             out.route, out.ocr_engine = ProcessingRoute.PDF_TEXT, doc.engine
-            return doc
+            return doc, []
         images = rasterize_pdf(data)  # scanned PDF: no usable text layer
     else:
         images = [load_image(data)]
 
-    tokens: list[TextToken] = []
-    try:
-        for page, image in enumerate(images):
+    papers = []
+    with _ocr_errors():
+        for image in images:
             paper = _upright_paper(ocr, image)
             if source_type == SourceType.IMAGE:
                 new = image_warnings(image, paper)
                 out.quality_warnings.extend(w for w in new if w not in out.quality_warnings)
-            tokens.extend(_recognize_page(ocr, paper, page))
+            papers.append(paper)
+    doc = _ocr_document(ocr, papers, wash=False)
+    out.route, out.ocr_engine = ProcessingRoute.LOCAL_OCR, ocr.name
+    out.ocr_mean_confidence = round(doc.mean_confidence, 3)
+    out.quality_warnings.extend(
+        ocr_warnings(sum(len(line.tokens) for line in doc.lines), doc.mean_confidence)
+    )
+    return doc, papers
+
+
+def _ocr_document(ocr: OcrEngine, papers: list[Image.Image], wash: bool) -> DocumentText:
+    """The text the OCR reads on the upright papers of one file (`wash`: see `preprocess.ocr_tiles`)."""
+    with _ocr_errors():
+        tokens = [
+            token for page, paper in enumerate(papers) for token in _recognize_page(ocr, paper, page, wash)
+        ]
+    return DocumentText(
+        lines=group_into_lines(tokens),
+        route=ProcessingRoute.LOCAL_OCR,
+        engine=ocr.name,
+        page_count=len(papers),
+    )
+
+
+@contextmanager
+def _ocr_errors() -> Iterator[None]:
+    """Any failure of the OCR engine as a TemporaryProcessingError (the job is retried)."""
+    try:
+        yield
     except OcrUnavailableError as exc:
         raise TemporaryProcessingError("OCR unavailable") from exc
     except Exception as exc:
         log.warning("ocr_failed", extra={"error_type": type(exc).__name__})
         raise TemporaryProcessingError("OCR failed") from exc
-    doc = DocumentText(
-        lines=group_into_lines(tokens),
-        route=ProcessingRoute.LOCAL_OCR,
-        engine=ocr.name,
-        page_count=len(images),
-    )
-    out.route, out.ocr_engine = ProcessingRoute.LOCAL_OCR, ocr.name
-    out.ocr_mean_confidence = round(doc.mean_confidence, 3)
-    out.quality_warnings.extend(ocr_warnings(len(tokens), doc.mean_confidence))
-    return doc
 
 
 def _upright_paper(ocr: OcrEngine, image: Image.Image) -> Image.Image:
@@ -246,13 +302,13 @@ def _upright_paper(ocr: OcrEngine, image: Image.Image) -> Image.Image:
     return paper.rotate(angle, expand=True) if angle else paper
 
 
-def _recognize_page(ocr: OcrEngine, paper: Image.Image, page: int) -> list[TextToken]:
+def _recognize_page(ocr: OcrEngine, paper: Image.Image, page: int, wash: bool) -> list[TextToken]:
     """OCR the paper slice by slice and put every token back at its place on the page; a small receipt gets
     extra looks (see `recognition`)."""
-    tiles = ocr_tiles(paper)
+    tiles = ocr_tiles(paper, wash)
     tokens = read_tiles(ocr, tiles, page)
     if paper.width < MIN_PAPER_WIDTH:
-        tokens = read_small_print(ocr, paper, tiles[0].image.width, tokens, page)
+        tokens = read_small_print(ocr, paper, tiles[0].image.width, tokens, page, wash)
     return tokens
 
 

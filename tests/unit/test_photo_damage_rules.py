@@ -11,8 +11,7 @@ import pytest
 from basketiq.domain.money import one_digit_apart
 from basketiq.domain.status import Merchant, ProcessingRoute
 from basketiq.pipeline.parsers import parser_for
-from basketiq.pipeline.parsers.base import count_from_total, parse_date_candidates
-from basketiq.pipeline.parsers.generic_pt import PAIRED_CONFIDENCE
+from basketiq.pipeline.parsers.base import PAIRED_CONFIDENCE, count_from_total, parse_date_candidates
 from basketiq.pipeline.schema import ParsedLine, ParsedReceipt
 from tests.helpers import doc_from_lines
 
@@ -248,3 +247,34 @@ def test_dates_as_the_ocr_reads_them() -> None:
         (c.value.isoformat(), c.time_.isoformat() if c.time_ else None) for c in parse_date_candidates(lines)
     }
     assert found == {("2026-10-24", "16:50:00"), ("2026-10-24", "16:51:00")}
+
+
+@pytest.mark.req("F-235")
+def test_lidl_photo_rows_split_glued_or_with_a_bracket_for_a_zero() -> None:
+    """Rows as the OCR read them from a photo of a real Lidl receipt (2026-11-03)."""
+    parsed = read(
+        Merchant.LIDL,
+        [
+            "EUR",
+            "SALADA ICEBERGUE 0), 59 B",  # a thin 0 read as a bracket
+            "SPECIAL FLAKES ORIGINAL",  # the price fell on the next row
+            "1,79 A −",
+            "Promoção -0,34",
+            "BEBIDA SOJA COM CHOCOLATE 0,94B",  # the class glued to the price
+            "Total 2,98",
+        ],
+    )
+    assert [(*reading(line), line.discount_cents, line.tax_code) for line in parsed.lines] == [
+        ("SALADA ICEBERGUE", Decimal(1), 59, 59, 0, "B"),
+        ("SPECIAL FLAKES ORIGINAL", Decimal(1), 179, 179, 34, "A"),
+        ("BEBIDA SOJA COM CHOCOLATE", Decimal(1), 94, 94, 0, "B"),
+    ]
+    assert parsed.lines[1].field_confidence["line_total"] <= PAIRED_CONFIDENCE  # the pairing is reviewed
+    assert parsed.total_cents == 298
+
+
+@pytest.mark.req("F-235")
+@pytest.mark.parametrize("printed", ["2026-11--03", "2026 11-03", "2026 -11-03"])
+def test_an_iso_date_with_a_dash_doubled_or_read_as_a_space(printed: str) -> None:
+    lines = doc_from_lines([f"Original Data de Venda: {printed}"]).lines
+    assert [c.value.isoformat() for c in parse_date_candidates(lines)] == ["2026-11-03"]

@@ -39,6 +39,7 @@ from basketiq.pipeline.parsers.base import (
     COUNT_INFERRED_CONFIDENCE,
     MONEY,
     RULE_EXACT,
+    as_paired,
     build_item,
     choose_purchase_datetime,
     count_from_total,
@@ -64,7 +65,6 @@ from basketiq.pipeline.schema import AMOUNT_TOKEN, DocumentText, ParsedLine, Par
 CONFIDENCE_CAP = 0.6
 _MIN_CODE_ROWS = 2  # rows that must start with a VAT code of the same width before it is cut
 CALIBRATED_CAP = 0.9  # merchants read from a few real samples: reviewed when the OCR is unsure
-PAIRED_CONFIDENCE = 0.7  # a price joined to a description that was on another row: always reviewed
 
 _EURO = r"(?:\s*(?:€|EUR|[eEcC](?=\s|$)))?"  # a lone "e" or "c" is the euro sign as the OCR read it
 # The VAT class, and a stray character the OCR may add after it. A photo of a small receipt misreads the class
@@ -497,14 +497,14 @@ def _orphan_item(description: str, amount: TextLine) -> ParsedLine:
     sits just above or below its name), but the pairing is a guess, so the line is reviewed."""
     m = _AMOUNT_AT_END.search(_text(amount))
     assert m is not None
-    item = build_item(
-        description=description,
-        total_text=m.group("total"),
-        line_conf=amount.confidence,
-        evidence=[description, _text(amount)],
+    return as_paired(
+        build_item(
+            description=description,
+            total_text=m.group("total"),
+            line_conf=amount.confidence,
+            evidence=[description, _text(amount)],
+        )
     )
-    item.field_confidence = {k: min(v, PAIRED_CONFIDENCE) for k, v in item.field_confidence.items()}
-    return item
 
 
 def _description(m: re.Match[str]) -> str:

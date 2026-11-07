@@ -101,6 +101,11 @@ def line_sums(items: Iterable[ParsedLine]) -> set[int]:
     return {printed, printed - sum(i.discount_cents for i in resolved)}
 
 
+def adds_up(items: list[ParsedLine], total: int | None) -> bool:
+    """Every line was read, and the lines add up to `total` (read either way, see `line_sums`)."""
+    return total is not None and not any(i.unresolved for i in items) and total in line_sums(items)
+
+
 # A description and a price whose comma the OCR lost ("BATATA BRANCA 2,5KG 229"); each parser frames it
 LOST_COMMA_BODY = r"(?P<desc>.*?[A-Za-zÀ-ÿ]{2}.*?)\s+(?P<cents>\d{3,4})"
 LostComma = tuple[int, TextLine, re.Match[str]]  # (position in the parsed lines, row, LOST_COMMA_BODY match)

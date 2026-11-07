@@ -9,6 +9,7 @@ import pytest
 
 from basketiq.domain.confidence import Thresholds
 from basketiq.domain.status import Merchant, ProcessingRoute, ReceiptStatus
+from basketiq.pipeline import preprocess
 from basketiq.pipeline.external import ExternalUnavailableError
 from basketiq.pipeline.llm import LlmProposals, LlmUnavailableError
 from basketiq.pipeline.llm.base import LlmLineProposal
@@ -289,3 +290,65 @@ def test_a_receipt_that_takes_few_pixels_of_the_photo_gets_a_resolution_warning(
         ReceiptStatus.COMPLETED,
         ReceiptStatus.REVIEW_REQUIRED,
     )  # a warning, never a rejection
+
+
+class _ShowThroughOcr(FakeOcr):
+    """Reads `washed` on a page whose back's print was washed out (fails there when it is None), the
+    configured lines otherwise."""
+
+    def __init__(self, lines: list[str], washed: list[str] | None) -> None:
+        super().__init__(lines)
+        self.washed = FakeOcr(washed or [], fail=RuntimeError("OCR crashed") if washed is None else None)
+
+    def recognize(self, image, page: int = 0):  # type: ignore[no-untyped-def]
+        reader = self.washed.recognize if image.info.get("washed") else super().recognize
+        return reader(image, page)
+
+
+def _read(monkeypatch: pytest.MonkeyPatch, first: list[str], washed: list[str] | None):  # type: ignore[no-untyped-def]
+    """A photo read as `first`, and as `washed` once the back's print is washed out."""
+
+    def tag(image):  # type: ignore[no-untyped-def]
+        image = image.copy()
+        image.info["washed"] = True
+        return image
+
+    monkeypatch.setattr(preprocess, "_level_ink", tag)
+    out = run_pipeline(PipelineRequest(make_png(), "image/png"), deps(ocr=_ShowThroughOcr(first, washed)))
+    assert out.parsed is not None
+    return out
+
+
+@pytest.mark.req("F-234")
+def test_a_photo_that_does_not_add_up_is_read_again_with_the_back_washed_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out = _read(
+        monkeypatch,
+        ["PAO 1,10 B", "LEITE sinigo vq.ibilms 0, B", "A PAGAR 1,99"],
+        washed=["PAO 1,10 B", "LEITE 0,89 B", "A PAGAR 1,99"],
+    )
+    assert [(line.raw_description, line.line_total_cents) for line in out.parsed.lines] == [
+        ("PAO", 110),
+        ("LEITE", 89),
+    ]
+    assert "show_through_washed" in out.notes
+
+
+@pytest.mark.req("F-234")
+@pytest.mark.parametrize(
+    "first", [["PAO 1,10 B", "LEITE 0,89 B", "A PAGAR 1,99"], ["PAO 1,10 B", "LEITE 0,8 B", "A PAGAR 1,99"]]
+)
+def test_the_washed_reading_is_kept_only_when_it_adds_up_and_the_first_did_not(
+    monkeypatch: pytest.MonkeyPatch, first: list[str]
+) -> None:
+    out = _read(monkeypatch, first, washed=["PAO 1,10 B", "OVOS 2,00 B", "A PAGAR 1,99"])
+    assert "OVOS" not in [line.raw_description for line in out.parsed.lines]
+    assert "show_through_washed" not in out.notes
+
+
+@pytest.mark.req("F-234")
+def test_a_second_look_that_fails_keeps_the_first_reading(monkeypatch: pytest.MonkeyPatch) -> None:
+    out = _read(monkeypatch, ["PAO 1,10 B", "LEITE 0,8 B", "A PAGAR 1,99"], washed=None)
+    assert out.status == ReceiptStatus.REVIEW_REQUIRED
+    assert out.parsed.lines[0].raw_description == "PAO"

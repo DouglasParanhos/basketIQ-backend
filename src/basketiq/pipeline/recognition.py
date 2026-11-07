@@ -42,13 +42,14 @@ def read_tiles(ocr: OcrEngine, tiles: list[OcrTile], page: int) -> list[TextToke
 
 
 def read_small_print(
-    ocr: OcrEngine, paper: Image.Image, width: int, tokens: list[TextToken], page: int
+    ocr: OcrEngine, paper: Image.Image, width: int, tokens: list[TextToken], page: int, wash: bool = False
 ) -> list[TextToken]:
-    """`tokens` (read on the paper scaled to `width` pixels) completed by the two extra looks."""
+    """`tokens` (read on the paper scaled to `width` pixels) completed by the two extra looks (`wash`: see
+    `preprocess.ocr_tiles`)."""
     enlarged = paper.resize(
         (SECOND_PASS_WIDTH, round(paper.height * SECOND_PASS_WIDTH / paper.width)), Image.Resampling.LANCZOS
     )
-    second = ocr_tiles(enlarged)
+    second = ocr_tiles(enlarged, wash)
     tokens = list(tokens)
     for token in read_tiles(ocr, second, page):
         moved = _scaled(token, width / second[0].image.width)

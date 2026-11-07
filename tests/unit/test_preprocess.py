@@ -4,6 +4,7 @@ import io
 import math
 from itertools import pairwise
 
+import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 from reportlab.lib.pagesizes import mm
@@ -87,8 +88,8 @@ def test_overlapping_slices_give_every_text_once_at_its_place_on_the_page(
 ) -> None:
     blank = Image.new("RGB", (900, 600))
     tiles = [OcrTile(blank, 0, 0.0, 450.0), OcrTile(blank, 400, 450.0, math.inf)]
-    monkeypatch.setattr(orchestrator, "ocr_tiles", lambda image: tiles)
-    tokens = orchestrator._recognize_page(_RowsOcr([0, 400]), blank, page=0)
+    monkeypatch.setattr(orchestrator, "ocr_tiles", lambda image, wash=False: tiles)
+    tokens = orchestrator._recognize_page(_RowsOcr([0, 400]), blank, page=0, wash=False)
     assert [t.text for t in sorted(tokens, key=lambda t: t.y0)] == [f"row{y}" for y in range(50, 1000, 100)]
     assert all(t.y0 == int(t.text[3:]) - 10 for t in tokens)
 
@@ -114,3 +115,35 @@ def test_bold_text_drawn_twice_is_read_once() -> None:
         c.drawString(5 * mm, 20 * mm, "0,464 kg x 6,19 EUR/kg")
     c.save()
     assert [line.text for line in extract_pdf_text(buf.getvalue()).lines] == ["0,464 kg x 6,19 EUR/kg"]
+
+
+def _on_a_fleece(paper: tuple[int, int, int, int]) -> Image.Image:
+    """White paper on a light, uneven surface (a fleece): blotches nearly as bright as the paper."""
+    blotches = np.random.default_rng(7).choice([110, 200], size=(80, 45), p=[0.4, 0.6]).astype(np.uint8)
+    image = Image.fromarray(np.kron(blotches, np.ones((20, 20), np.uint8))).convert("RGB")
+    ImageDraw.Draw(image).rectangle(paper, fill=(235, 235, 235))
+    return image
+
+
+@pytest.mark.req("F-233")
+def test_the_paper_on_a_light_uneven_surface_is_found_as_the_brightest_thing() -> None:
+    cropped = crop_to_paper(_on_a_fleece((300, 100, 600, 1500)))
+    assert 300 <= cropped.width <= 330
+    assert 1400 <= cropped.height <= 1460
+
+
+@pytest.mark.req("F-234")
+def test_the_back_showing_through_is_washed_out_and_the_ink_kept_in_any_light() -> None:
+    paper = Image.new("L", (1000, 1200), 230)
+    draw = ImageDraw.Draw(paper)
+    draw.rectangle((500, 0, 999, 1199), fill=150)  # a shadow over the right half
+    for left, light in ((100, 230), (700, 150)):
+        draw.rectangle((left, 100, left + 8, 300), fill=round(light * 0.3))  # a printed stroke
+        draw.rectangle(
+            (left, 600, left + 8, 800), fill=round(light * 0.9)
+        )  # the back's print through the paper (0.9 on a photo)
+    level = np.asarray(ocr_tiles(paper.convert("RGB"), wash=True)[0].image.convert("L"))
+    for left in (100, 700):
+        assert level[200, left + 4] < 40  # ink: black
+        assert level[700, left + 4] > 230  # show-through: gone
+        assert level[1000, left + 4] > 230  # paper: white, in the light and in the shadow

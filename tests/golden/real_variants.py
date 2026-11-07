@@ -204,7 +204,7 @@ def _text_pdf(photo: bytes, engine: OcrEngine) -> bytes:
     """The words the OCR reads on the photo, each at its column (never overlapping the previous word, or the
     PDF reader would glue them), one printed row per text line."""
     outcome = orchestrator.PipelineOutcome(status=ReceiptStatus.EXTRACTING)
-    lines = orchestrator._extract_text(photo, SourceType.IMAGE, engine, outcome).lines
+    lines = orchestrator._extract_text(photo, SourceType.IMAGE, engine, outcome)[0].lines
     tokens = [t for line in lines for t in line.tokens]
     left, right = min(t.x0 for t in tokens), max(t.x1 for t in tokens)
     page_width, margin, pitch, size = 227.0, 12.0, 10.0, 6.0  # an 80 mm receipt in Courier

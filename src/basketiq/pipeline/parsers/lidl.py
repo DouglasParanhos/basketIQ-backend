@@ -23,6 +23,7 @@ from basketiq.domain.status import Merchant, ProcessingRoute, Unit
 from basketiq.pipeline.parsers.base import (
     MONEY,
     RULE_EXACT,
+    as_paired,
     build_item,
     choose_purchase_datetime,
     find_amount,
@@ -40,7 +41,11 @@ _ITEM = re.compile(rf"{_NAME_AND_PRICE}\s+(?P<tax>[A-F])$")
 # On a photo the VAT class after the price may be lost (glare), misread ("3,49 8" for B) or followed by a
 # stray character ("3,49 B E"); only a letter A-F is kept. A searchable PDF prints it exactly, so there a
 # missing class means the line is not a Lidl item.
-_PHOTO_ITEM = re.compile(rf"{_NAME_AND_PRICE}(?:\s+(?P<tax>\S))?(?:\s+\S)?$")
+# The class may also be glued to the price ("0,94B").
+_PHOTO_TAIL = r"(?:(?:\s+|(?=[A-F]))(?P<tax>\S))?(?:\s+\S)?$"
+_PHOTO_ITEM = re.compile(_NAME_AND_PRICE + _PHOTO_TAIL)
+# A row a photo's OCR split in two: the description alone, then its price ("1,79 A").
+_PHOTO_PRICE = re.compile(rf"(?P<total>-?{MONEY}){_PHOTO_TAIL}")
 # A photo may leave a stray character before the unit or at the end ("0,318 kg x 19,97 I EUR/kg",
 # "3 x 0,59 S").
 _QTY = re.compile(
@@ -71,7 +76,8 @@ class LidlParser:
         item_zone = lines[start + 1 : end]
         summary = lines[end:]
 
-        item_shape = _PHOTO_ITEM if doc.route == ProcessingRoute.LOCAL_OCR else _ITEM
+        photo = doc.route == ProcessingRoute.LOCAL_OCR
+        item_shape = _PHOTO_ITEM if photo else _ITEM
         parsed: list[ParsedLine] = []
         pending_description: str | None = None
         for line in item_zone:
@@ -117,16 +123,19 @@ class LidlParser:
                     parsed.append(unresolved_line(line))
                 pending_description = None
                 continue
-            if m := item_shape.match(text):
-                parsed.append(
-                    build_item(
-                        description=m.group("desc"),
-                        total_text=m.group("total"),
-                        tax_code=_vat_class(m.group("tax")),
-                        line_conf=line.confidence,
-                        evidence=[text],
-                    )
+            m = item_shape.match(text)
+            name = None if m or not photo else pending_description  # its price may be this row alone
+            if name:
+                m = _PHOTO_PRICE.match(text)
+            if m:
+                item = build_item(
+                    description=name or m.group("desc"),
+                    total_text=m.group("total"),
+                    tax_code=_vat_class(m.group("tax")),
+                    line_conf=line.confidence,
+                    evidence=[name, text] if name else [text],
                 )
+                parsed.append(as_paired(item) if name else item)
                 pending_description = None
                 continue
             if re.search(MONEY, text):

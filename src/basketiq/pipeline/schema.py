@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 from basketiq.domain.status import Merchant, ProcessingRoute
 
 _SPLIT_AMOUNT = re.compile(r"(\d),\s+(\d{2})(?!\d)")
+# A thin 0 before the comma read as a bracket ("0), 59", "(),94").
+_ZERO_AS_BRACKET = re.compile(r"(?<![\w(])(?:0\)|\(\))(?=,\s*\d{2}(?!\d))")
 AMOUNT_TOKEN = re.compile(r"^\(?-?\d{1,4}[,.]\d{2}(?!\d)")
 
 
@@ -37,7 +39,7 @@ class TextLine(BaseModel):
     def text(self) -> str:
         joined = " ".join(t.text for t in self.tokens).strip()
         # OCR often splits amounts at the separator ("18, 17"): rejoin before parsing.
-        return _SPLIT_AMOUNT.sub(r"\1,\2", joined)
+        return _SPLIT_AMOUNT.sub(r"\1,\2", _ZERO_AS_BRACKET.sub("0", joined))
 
     @property
     def value_tokens(self) -> list[TextToken]:

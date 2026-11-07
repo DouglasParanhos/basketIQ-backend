@@ -1,11 +1,11 @@
 {
   "meta": {
     "mode": "unseen",
-    "generated": "2026-10-31T23:07:43+00:00",
-    "documents": 38,
+    "generated": "2026-11-07T13:18:29+00:00",
+    "documents": 39,
     "qr": "off",
-    "head": "cbfd0dc plus the 2026-10-31 real-receipt calibration (Lidl e-invoices, Pingo Doce card balance, screenshot alpha)",
-    "after": "Real set grew from 12 to 38 documents (13 Lidl and 8 Pingo Doce e-invoices, 1 Lidl screenshot, 4 new photos of known receipts). Known generic gaps, read right by the calibrated parsers: Pingo Doce card balance (Saldo) and Lidl 'Deposito 0.60' lines",
+    "head": "d6d8906 plus the 2026-11-07 photo fixes (paper on a light surface, a second look with the back's print washed out, Lidl photo rows)",
+    "after": "Real set grew from 38 to 39 documents: a Lidl photo on a light fleece, thin paper showing its back's print. The generic parser reads it badly (total missing, 5/9 lines); the Lidl parser reads it right. Known generic gaps, read right by the calibrated parsers: Pingo Doce card balance (Saldo) and Lidl 'Deposito 0.60' lines",
     "environment": "WSL2 ubuntu2 on Windows, paddlepaddle 3.2.2; not the 4 vCPU target",
     "caveat": "Small, biased sample: the calibrated parsers extend the generic one and were tuned on these same receipts, so these numbers are optimistic. They show that the mechanics work and serve as a regression control; they do not prove that unseen shops are read well. unreviewed_wrong is 0 by construction (the generic parser caps confidence at 0.6, so every receipt goes to review) and only becomes informative once confidence can be earned."
   },
@@ -71,18 +71,18 @@
       "unreviewed_wrong": 0
     },
     "LIDL": {
-      "documents": 15,
+      "documents": 16,
       "merchant_accuracy": 1.0,
       "date_accuracy": 1.0,
-      "total_accuracy": 1.0,
+      "total_accuracy": 0.9375,
       "status_accuracy": null,
       "route_accuracy": 1.0,
-      "line_recall": 1.0,
-      "line_precision": 1.0,
-      "field_accuracy": 0.9803,
+      "line_recall": 0.9675,
+      "line_precision": 0.9675,
+      "field_accuracy": 0.9811,
       "price_mae_cents": 0.0,
       "review_flag_accuracy": null,
-      "corrections_per_note": 0.2,
+      "corrections_per_note": 0.5,
       "unreviewed_wrong": 0
     },
     "MERCADONA": {
@@ -118,18 +118,18 @@
   },
   "per_route": {
     "LOCAL_OCR": {
-      "documents": 11,
+      "documents": 12,
       "merchant_accuracy": 1.0,
       "date_accuracy": 1.0,
-      "total_accuracy": 1.0,
+      "total_accuracy": 0.9167,
       "status_accuracy": null,
       "route_accuracy": 1.0,
-      "line_recall": 1.0,
-      "line_precision": 1.0,
+      "line_recall": 0.9849,
+      "line_precision": 0.9849,
       "field_accuracy": 1.0,
       "price_mae_cents": 0.0,
       "review_flag_accuracy": null,
-      "corrections_per_note": 2.55,
+      "corrections_per_note": 2.75,
       "unreviewed_wrong": 0
     },
     "PDF_TEXT": {
@@ -149,18 +149,18 @@
     }
   },
   "overall": {
-    "documents": 38,
+    "documents": 39,
     "merchant_accuracy": 1.0,
     "date_accuracy": 1.0,
-    "total_accuracy": 0.9737,
+    "total_accuracy": 0.9487,
     "status_accuracy": null,
     "route_accuracy": 1.0,
-    "line_recall": 0.9979,
-    "line_precision": 0.9957,
+    "line_recall": 0.9895,
+    "line_precision": 0.9874,
     "field_accuracy": 0.9952,
     "price_mae_cents": 0.0,
     "review_flag_accuracy": null,
-    "corrections_per_note": 0.89,
+    "corrections_per_note": 1.0,
     "unreviewed_wrong": 0
   }
 }

@@ -17,7 +17,8 @@ SECOND = ["ARROZ 1,10 B", "OVOS 2,50 B", "SUMO 1,99 B", "Total 7,67", "10.10.26 
 
 
 class OneReadingPerPhoto(StubOcr):
-    """An OCR that reads a different set of lines for every photo it is handed, in order."""
+    """An OCR that reads a different set of lines for every photo it is handed, in order (a second look at
+    the receipt reads them again)."""
 
     name = "per-photo-ocr"
 
@@ -26,7 +27,7 @@ class OneReadingPerPhoto(StubOcr):
         self.calls = 0
 
     def recognize(self, image: Image.Image, page: int = 0) -> list[TextToken]:
-        lines = self.photos[self.calls]
+        lines = self.photos[self.calls % len(self.photos)]
         self.calls += 1
         return [
             TextToken(text=t, x0=0, y0=i * 20, x1=300, y1=i * 20 + 15, confidence=0.97, page=page)
