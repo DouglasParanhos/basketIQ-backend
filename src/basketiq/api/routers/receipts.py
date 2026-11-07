@@ -303,6 +303,19 @@ def confirm(
     return serialize(db, settings, svc.confirm(db, settings, user, receipt_id, body.version))
 
 
+@router.post(
+    "/{receipt_id}/reopen",
+    response_model=ReceiptOut,
+    responses={409: {"model": ErrorBody}},
+    summary="Reopen a confirmed receipt for review, to edit it (spec 018)",
+)
+@translate_errors
+def reopen(
+    receipt_id: uuid.UUID, body: VersionIn, db: Db, settings: SettingsDep, user: ConsentedUser
+) -> ReceiptOut:
+    return serialize(db, settings, svc.reopen(db, settings, user, receipt_id, body.version))
+
+
 @router.post("/{receipt_id}/duplicate-decision", response_model=ReceiptOut | None)
 @translate_errors
 def duplicate_decision(
