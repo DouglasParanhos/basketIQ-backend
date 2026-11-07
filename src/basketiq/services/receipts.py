@@ -358,7 +358,7 @@ LINE_FIELDS = (
 )
 
 
-def _check_editable(receipt: Receipt, version: int) -> None:
+def _check_version(receipt: Receipt, version: int) -> None:
     if receipt.version != version:
         raise ServiceError(
             409,
@@ -366,6 +366,20 @@ def _check_editable(receipt: Receipt, version: int) -> None:
             "A compra foi alterada noutro lado. Recarregue.",
             details={"current_version": receipt.version},
         )
+
+
+def _reevaluate(db: Session, settings: Settings, receipt: Receipt) -> None:
+    """The review reasons of `receipt` worked out again, and its status from them (in review while any is
+    left)."""
+    evaluation = evaluate_receipt(db, settings, receipt)
+    apply_evaluation(receipt, evaluation)
+    receipt.processing_status = (
+        ReceiptStatus.REVIEW_REQUIRED if evaluation.reasons else ReceiptStatus.COMPLETED
+    )
+
+
+def _check_editable(receipt: Receipt, version: int) -> None:
+    _check_version(receipt, version)
     if receipt.processing_status not in EDITABLE_STATUSES:
         raise ServiceError(409, "invalid_state", "Esta compra não pode ser editada no estado atual.")
 
@@ -398,11 +412,7 @@ def edit_receipt(
     receipt.version += 1
     if receipt.processing_status == ReceiptStatus.COMPLETED:
         receipt.processing_status = ReceiptStatus.REVIEW_REQUIRED
-    evaluation = evaluate_receipt(db, settings, receipt)
-    apply_evaluation(receipt, evaluation)
-    receipt.processing_status = (
-        ReceiptStatus.REVIEW_REQUIRED if evaluation.reasons else ReceiptStatus.COMPLETED
-    )
+    _reevaluate(db, settings, receipt)
     db.flush()
     audit.record(db, "RECEIPT_EDITED", user_id=user.id, receipt_id=receipt.id, fields=sorted(edited))
     return receipt
@@ -522,6 +532,21 @@ def confirm(db: Session, settings: Settings, user: User, receipt_id: uuid.UUID, 
     return receipt
 
 
+def reopen(db: Session, settings: Settings, user: User, receipt_id: uuid.UUID, version: int) -> Receipt:
+    """A confirmed purchase back to review, to be edited (spec 018): it leaves the spending until it is
+    confirmed again."""
+    receipt = get_owned(db, user, receipt_id, for_update=True)
+    _check_version(receipt, version)
+    if receipt.processing_status != ReceiptStatus.CONFIRMED:
+        raise ServiceError(409, "invalid_state", "Só uma compra confirmada pode ser reaberta.")
+    receipt.confirmed_at = receipt.confirmed_by = None
+    _reevaluate(db, settings, receipt)
+    receipt.version += 1
+    db.flush()
+    audit.record(db, "RECEIPT_REOPENED", user_id=user.id, receipt_id=receipt.id)
+    return receipt
+
+
 def mark_confirmed(receipt: Receipt, settings: Settings, by: ConfirmedBy) -> None:
     now = datetime.now(UTC)
     receipt.processing_status = ReceiptStatus.CONFIRMED
@@ -542,11 +567,7 @@ def duplicate_decision(
     receipt.duplicate_acknowledged = True
     receipt.version += 1
     if receipt.processing_status in EDITABLE_STATUSES:
-        evaluation = evaluate_receipt(db, settings, receipt)
-        apply_evaluation(receipt, evaluation)
-        receipt.processing_status = (
-            ReceiptStatus.REVIEW_REQUIRED if evaluation.reasons else ReceiptStatus.COMPLETED
-        )
+        _reevaluate(db, settings, receipt)
     audit.record(db, "DUPLICATE_KEPT", user_id=user.id, receipt_id=receipt.id)
     return receipt
 
