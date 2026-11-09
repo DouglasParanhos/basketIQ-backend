@@ -237,7 +237,7 @@ def _base_price(
     return None, basis
 
 
-def _priced_line(
+def priced_line(
     qty: Decimal | None, unit: str | None, unit_price: int | None, total: int | None, discount: int | None
 ) -> dict[str, Any]:
     """One purchase line with its net value and its price in the base unit of the line."""
@@ -257,7 +257,7 @@ def _qty_in_basis(h: dict[str, Any]) -> Decimal:
     return q / 1000 if h["unit"] in (Unit.G, Unit.ML) else q
 
 
-def _price_basis(history: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], Decimal]:
+def price_basis(history: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], Decimal]:
     """The most frequent base unit of the lines, the lines in it and their total quantity."""
     counter = Counter(h["price_basis"] for h in history)
     basis = counter.most_common(1)[0][0] if counter else Unit.UNIT
@@ -311,12 +311,12 @@ def product_analytics(
             "receipt_id": str(rid),
             "date": purchase_at.astimezone(tz).date().isoformat() if purchase_at else None,
             "merchant": merchant,
-            **_priced_line(qty, unit, unit_price, total, discount),
+            **priced_line(qty, unit, unit_price, total, discount),
             "raw_description": raw,
         }
         for rid, purchase_at, merchant, qty, unit, unit_price, total, discount, raw in rows
     ]
-    basis, same_basis, total_qty = _price_basis(history)
+    basis, same_basis, total_qty = price_basis(history)
     total_spent = sum(h["net_cents"] for h in history)
     prices = [h["unit_price_cents"] for h in same_basis if h["unit_price_cents"] is not None]
 
@@ -493,14 +493,14 @@ def list_articles(
                 "packages": Decimal(units or 0),
                 "discounted": bool(discount),
                 # Priced from the net, never the printed price, so a discount shows in it (D10).
-                **_priced_line(qty, unit, unit_price=None, total=total, discount=discount),
+                **priced_line(qty, unit, unit_price=None, total=total, discount=discount),
             }
         )
 
     items: list[dict[str, Any]] = []
     for pid, p in per_product.items():
         history = p["lines"]
-        basis, same_basis, _ = _price_basis(history)
+        basis, same_basis, _ = price_basis(history)
         priced = [h for h in same_basis if h["unit_price_cents"] is not None]
         receipts_of: dict[tuple[str | None, str], set[uuid.UUID]] = defaultdict(set)
         priced_of: dict[tuple[str | None, str], list[dict[str, Any]]] = defaultdict(list)
@@ -596,13 +596,13 @@ def search_products(db: Session, user_id: uuid.UUID, q: str | None, limit: int) 
     for pid, rid, merchant, qty, unit, unit_price, total, discount in line_rows:
         assert pid is not None  # the in_() filter excludes NULL
         lines_of[pid].append(
-            {"receipt_id": rid, "merchant": merchant, **_priced_line(qty, unit, unit_price, total, discount)}
+            {"receipt_id": rid, "merchant": merchant, **priced_line(qty, unit, unit_price, total, discount)}
         )
 
     items = []
     for pid, name, unit_type, line_count, spent, last in found:
         history = lines_of[pid]
-        basis, same_basis, _ = _price_basis(history)
+        basis, same_basis, _ = price_basis(history)
         items.append(
             {
                 "id": str(pid),

@@ -352,3 +352,41 @@ class MerchantConfig(Base):
     reconciliation_tolerance_cents: Mapped[int | None] = mapped_column(Integer)
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
     updated_by: Mapped[uuid.UUID | None]
+
+
+class ShoppingList(Base):
+    """The user's shopping list (one per user for now, with room for more). Deleted with the user."""
+
+    __tablename__ = "shopping_lists"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    merchant: Mapped[str | None] = mapped_column(String(32))  # the supermarket chosen on the list
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+    items: Mapped[list[ShoppingListItem]] = relationship(
+        back_populates="shopping_list", cascade="all, delete-orphan"
+    )
+
+
+class ShoppingListItem(Base):
+    """One product on the list. `deleted_at` is the «Desfazer» window: hidden first, purged later."""
+
+    __tablename__ = "shopping_list_items"
+    __table_args__ = (Index("ix_shopping_list_items_list_position", "list_id", "position"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    list_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shopping_lists.id", ondelete="CASCADE"))
+    product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
+    name: Mapped[str] = mapped_column(String(255))
+    category: Mapped[str] = mapped_column(String(32))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=Decimal(1))
+    unit: Mapped[str | None] = mapped_column(String(4))
+    checked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    already_have: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    position: Mapped[int] = mapped_column(Integer)
+    deleted_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    shopping_list: Mapped[ShoppingList] = relationship(back_populates="items")

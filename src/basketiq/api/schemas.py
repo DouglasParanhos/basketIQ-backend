@@ -4,11 +4,12 @@ import uuid
 from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictInt, field_validator
 from pydantic_core import PydanticCustomError
 
+from basketiq.domain.categories import CATEGORY_IDS
 from basketiq.domain.status import (
     HOUSEHOLD_SIZE_RANGE,
     MONTHLY_GOAL_CENTS_RANGE,
@@ -570,6 +571,141 @@ class ListArticlesOut(BaseModel):
     date_to: str
     items: list[ListItem]
     excluded_lines: int
+
+
+# ---------------------------------------------------------------- shopping list (RF-16)
+
+
+class CategoryOut(BaseModel):
+    id: str
+    name: str
+
+
+class ExpectedPriceOut(BaseModel):
+    """What the person last paid for the product: at the chosen supermarket, or else at another one."""
+
+    price_cents: int
+    price_basis: Literal["un", "kg", "l"]
+    date: str
+    merchant: str | None
+    merchant_name: str
+    other_merchant: bool
+    source: Literal["own_receipts"]
+
+
+class ShoppingItemOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    category: str
+    category_name: str
+    quantity: str
+    unit: str | None
+    checked: bool
+    already_have: bool
+    product_id: uuid.UUID | None
+    expected: ExpectedPriceOut | None
+
+
+class EstimateOut(BaseModel):
+    """The list's estimate at one supermarket. Values from other supermarkets are counted, never hidden."""
+
+    merchant: str
+    merchant_name: str
+    total_cents: int
+    items_with_price: int
+    other_merchant_values: int
+
+
+class ShoppingListOut(BaseModel):
+    merchant: str
+    categories: list[CategoryOut]
+    items: list[ShoppingItemOut]
+    estimates: list[EstimateOut]
+    items_total: int
+    checked_count: int
+    already_have_excluded: int
+
+
+def _known_category(value: str) -> str:
+    if value not in CATEGORY_IDS:
+        raise PydanticCustomError("category", "Categoria inválida.")
+    return value
+
+
+def _clean_name(value: str) -> str:
+    value = " ".join(value.split())
+    if not value:
+        raise PydanticCustomError("name", "Indique o produto.")
+    return value
+
+
+Category = Annotated[str, AfterValidator(_known_category)]
+ItemName = Annotated[str, Field(min_length=1, max_length=255), AfterValidator(_clean_name)]
+ItemQuantity = Annotated[Decimal, Field(gt=0, lt=10000, max_digits=7, decimal_places=3)]
+ItemUnit = Literal["un", "kg", "g", "l", "ml"]
+
+
+class ShoppingItemIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: ItemName
+    quantity: ItemQuantity = Decimal(1)
+    unit: ItemUnit | None = None
+    category: Category | None = None
+    already_have: bool = False
+    product_id: uuid.UUID | None = None
+
+
+class ShoppingItemPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: ItemName | None = None
+    quantity: ItemQuantity | None = None
+    unit: ItemUnit | None = None
+    category: Category | None = None
+    checked: bool | None = None
+    already_have: bool | None = None
+
+
+class ShoppingMerchantIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    merchant: Merchant
+
+    @field_validator("merchant")
+    @classmethod
+    def _supported(cls, value: Merchant) -> Merchant:
+        if value not in SUPPORTED_MERCHANTS:
+            raise PydanticCustomError("merchant", "Supermercado não suportado.")
+        return value
+
+
+class EvolutionPointOut(BaseModel):
+    date: str
+    price_cents: int
+    quantity: str | None
+    merchant: str | None
+    merchant_name: str
+    origin: Literal["own", "base"]
+
+
+class EvolutionOut(BaseModel):
+    """The price history of a list item. `has_history` is false when there is nothing to show."""
+
+    has_history: bool
+    price_basis: Literal["un", "kg", "l"] | None
+    expected: ExpectedPriceOut | None
+    last_cents: int | None
+    min_cents: int | None
+    max_cents: int | None
+    points: list[EvolutionPointOut]
+
+
+class SuggestionOut(BaseModel):
+    product_id: uuid.UUID
+    name: str
+    category: str
+    category_name: str
 
 
 class ProductAnalyticsOut(BaseModel):
