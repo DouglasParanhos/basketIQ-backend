@@ -459,3 +459,15 @@ def test_the_product_screen_gets_the_group_of_its_latest_purchase(
     resp = client.get(f"/v1/products/{product.id}/analytics")
     assert resp.status_code == 200, resp.text
     assert resp.json()["group"]["slug"] == "leite-uht"
+
+
+@pytest.mark.req("F-64")
+def test_the_receipt_uses_the_configured_minimum_of_purchases(
+    client: TestClient, user: User, buy: Callable[..., uuid.UUID], config_is: Any
+) -> None:
+    buy(user, 30, [milk(100)])
+    buy(user, 20, [milk(100)])
+    rid = buy(user, 0, [milk(200)])
+    config_is(COMPARISON_MIN_PURCHASES=2)
+    check = check_of(client, rid)
+    assert (check["status"], check["needed"]) == ("above", 2)

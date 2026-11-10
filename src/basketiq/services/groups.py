@@ -74,7 +74,11 @@ def resolve(
     rule: UserLineRule | None,
     catalog: Catalog,
 ) -> LineGroup:
-    """One line: its catalogue classification and printed size, overridden by the user's rule."""
+    """One line: its catalogue classification and printed size, overridden by the user's rule.
+
+    The status, the group and the basis depend only on whether there is a (positive) quantity, never on its
+    amount; the amount only scales the returned quantity. «Por completar» relies on this.
+    """
     status, group = classification.status, classification.group
     source = "catalog" if group else None
     if rule is not None and rule.not_comparable:
@@ -366,9 +370,28 @@ def to_complete(
     """Descriptions «por agrupar» (tab ``ungrouped``) or grouped without a size (``missing_size``), the
     most spending first, ``page_size`` at a time; the rest can wait (D13)."""
     resolver = _Resolver(db, user_id, catalog)
+    # One row per spelling, unit and «has a quantity» (all a line's group and size depend on), summed in SQL.
+    has_quantity = func.coalesce(ReceiptLine.quantity_decimal, 0) > 0
+    keys = (Receipt.merchant, ReceiptLine.raw_description, ReceiptLine.unit, has_quantity)
+    spellings = db.execute(
+        _confirmed(
+            select(
+                *keys[:-1],
+                has_quantity.label("has_quantity"),
+                func.max(Receipt.merchant_name).label("merchant_name"),
+                func.count().label("lines"),
+                func.array_agg(func.distinct(Receipt.id)).label("receipts"),
+                func.sum(analytics._net).label("net"),
+            ),
+            user_id,
+        )
+        .group_by(*keys)
+        .order_by(func.max(Receipt.purchase_at))  # the latest confirmed spelling comes last and wins
+    ).all()
     items: dict[RuleKey, dict[str, Any]] = {}
-    for row in _confirmed_lines(db, user_id):
-        lg = resolver(row.raw_description, row.merchant, row.quantity, row.unit)
+    for row in spellings:
+        quantity = Decimal(1) if row.has_quantity else None  # only its presence matters (see resolve)
+        lg = resolver(row.raw_description, row.merchant, quantity, row.unit)
         if tab == "ungrouped":
             wanted = lg.status == GroupStatus.UNGROUPED
         else:
@@ -393,10 +416,10 @@ def to_complete(
                 "rule_id": rule.id if rule else None,
             },
         )
-        item["description"] = row.raw_description  # the latest confirmed spelling
-        item["lines"] += 1
-        item["receipts"].add(row.receipt_id)
-        item["spent_cents"] += row.net
+        item["description"] = row.raw_description
+        item["lines"] += row.lines
+        item["receipts"].update(row.receipts)
+        item["spent_cents"] += int(row.net)
     page = heapq.nsmallest(page_size, items.values(), key=lambda i: (-i["spent_cents"], i["description_key"]))
     for i in page:
         i["purchases"] = len(i.pop("receipts"))
@@ -429,23 +452,14 @@ def _rule_out(rule: UserLineRule, catalog: Catalog, applied: int, description: s
 def _lines_by_key(db: Session, user_id: uuid.UUID) -> dict[RuleKey, tuple[int, str]]:
     """(chain, description key) → (confirmed lines, latest spelling) of the user, counted in the database."""
     rows = db.execute(
-        _confirmed(
-            select(
-                Receipt.merchant, ReceiptLine.raw_description, func.count(), func.max(Receipt.purchase_at)
-            ),
-            user_id,
-        ).group_by(Receipt.merchant, ReceiptLine.raw_description)
+        _confirmed(select(Receipt.merchant, ReceiptLine.raw_description, func.count()), user_id)
+        .group_by(Receipt.merchant, ReceiptLine.raw_description)
+        .order_by(func.max(Receipt.purchase_at))  # the latest spelling comes last and wins
     ).all()
     out: dict[RuleKey, tuple[int, str]] = {}
-    latest: dict[RuleKey, datetime] = {}
-    for merchant, raw, count, last in rows:
+    for merchant, raw, count in rows:
         key = rule_key(merchant, raw)
-        total = out.get(key, (0, raw))[0] + count
-        if key not in latest or last > latest[key]:
-            latest[key] = last
-            out[key] = (total, raw)
-        else:
-            out[key] = (total, out[key][1])
+        out[key] = (out.get(key, (0, raw))[0] + count, raw)
     return out
 
 
