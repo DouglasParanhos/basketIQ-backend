@@ -2365,6 +2365,326 @@
         }
       }
     },
+    "/v1/lists/current": {
+      "get": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "The user's shopping list, with its estimates",
+        "operationId": "current_v1_lists_current_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/lists/current/merchant": {
+      "put": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Choose the supermarket of the list",
+        "operationId": "choose_merchant_v1_lists_current_merchant_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShoppingMerchantIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/lists/current/items": {
+      "post": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Add a product to the list",
+        "operationId": "add_item_v1_lists_current_items_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShoppingItemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/lists/current/items/{item_id}": {
+      "patch": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Edit, tick or mark «já tenho»",
+        "operationId": "edit_item_v1_lists_current_items__item_id__patch",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShoppingItemPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Remove an item (can be undone)",
+        "operationId": "remove_item_v1_lists_current_items__item_id__delete",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/lists/current/items/{item_id}/restore": {
+      "post": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "Undo the removal of an item",
+        "operationId": "restore_item_v1_lists_current_items__item_id__restore_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/lists/current/items/{item_id}/evolution": {
+      "get": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "What was paid for an item over time",
+        "operationId": "evolution_v1_lists_current_items__item_id__evolution_get",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 12,
+              "minimum": 1,
+              "default": 6,
+              "title": "Months"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvolutionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/lists/current/suggestions": {
+      "get": {
+        "tags": [
+          "lists"
+        ],
+        "summary": "«Para a próxima compra»",
+        "operationId": "suggestions_v1_lists_current_suggestions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SuggestionOut"
+                  },
+                  "type": "array",
+                  "title": "Response Suggestions V1 Lists Current Suggestions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/jobs": {
       "get": {
         "tags": [
@@ -2930,6 +3250,24 @@
         ],
         "title": "CardsOut"
       },
+      "CategoryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "CategoryOut"
+      },
       "ConsumptionItem": {
         "properties": {
           "product_id": {
@@ -3156,6 +3494,239 @@
           "action"
         ],
         "title": "ErrorInfo"
+      },
+      "EstimateOut": {
+        "properties": {
+          "merchant": {
+            "type": "string",
+            "title": "Merchant"
+          },
+          "merchant_name": {
+            "type": "string",
+            "title": "Merchant Name"
+          },
+          "total_cents": {
+            "type": "integer",
+            "title": "Total Cents"
+          },
+          "items_with_price": {
+            "type": "integer",
+            "title": "Items With Price"
+          },
+          "other_merchant_values": {
+            "type": "integer",
+            "title": "Other Merchant Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "merchant",
+          "merchant_name",
+          "total_cents",
+          "items_with_price",
+          "other_merchant_values"
+        ],
+        "title": "EstimateOut",
+        "description": "The list's estimate at one supermarket. Values from other supermarkets are counted, never hidden."
+      },
+      "EvolutionOut": {
+        "properties": {
+          "has_history": {
+            "type": "boolean",
+            "title": "Has History"
+          },
+          "price_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "un",
+                  "kg",
+                  "l"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Basis"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpectedPriceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Cents"
+          },
+          "min_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Cents"
+          },
+          "max_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Cents"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/EvolutionPointOut"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "has_history",
+          "price_basis",
+          "expected",
+          "last_cents",
+          "min_cents",
+          "max_cents",
+          "points"
+        ],
+        "title": "EvolutionOut",
+        "description": "The price history of a list item. `has_history` is false when there is nothing to show."
+      },
+      "EvolutionPointOut": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "price_cents": {
+            "type": "integer",
+            "title": "Price Cents"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "merchant_name": {
+            "type": "string",
+            "title": "Merchant Name"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "own",
+              "base"
+            ],
+            "title": "Origin"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "price_cents",
+          "quantity",
+          "merchant",
+          "merchant_name",
+          "origin"
+        ],
+        "title": "EvolutionPointOut"
+      },
+      "ExpectedPriceOut": {
+        "properties": {
+          "price_cents": {
+            "type": "integer",
+            "title": "Price Cents"
+          },
+          "price_basis": {
+            "type": "string",
+            "enum": [
+              "un",
+              "kg",
+              "l"
+            ],
+            "title": "Price Basis"
+          },
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "merchant_name": {
+            "type": "string",
+            "title": "Merchant Name"
+          },
+          "other_merchant": {
+            "type": "boolean",
+            "title": "Other Merchant"
+          },
+          "source": {
+            "type": "string",
+            "const": "own_receipts",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_cents",
+          "price_basis",
+          "date",
+          "merchant",
+          "merchant_name",
+          "other_merchant",
+          "source"
+        ],
+        "title": "ExpectedPriceOut",
+        "description": "What the person last paid for the product: at the chosen supermarket, or else at another one."
       },
       "FieldError": {
         "properties": {
@@ -5749,6 +6320,314 @@
         ],
         "title": "SeriesPoint"
       },
+      "ShoppingItemIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMaximum": 10000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Quantity",
+            "default": "1"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "un",
+                  "kg",
+                  "g",
+                  "l",
+                  "ml"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "already_have": {
+            "type": "boolean",
+            "title": "Already Have",
+            "default": false
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ShoppingItemIn"
+      },
+      "ShoppingItemOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "category_name": {
+            "type": "string",
+            "title": "Category Name"
+          },
+          "quantity": {
+            "type": "string",
+            "title": "Quantity"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "checked": {
+            "type": "boolean",
+            "title": "Checked"
+          },
+          "already_have": {
+            "type": "boolean",
+            "title": "Already Have"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpectedPriceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "category",
+          "category_name",
+          "quantity",
+          "unit",
+          "checked",
+          "already_have",
+          "product_id",
+          "expected"
+        ],
+        "title": "ShoppingItemOut"
+      },
+      "ShoppingItemPatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMaximum": 10000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "un",
+                  "kg",
+                  "g",
+                  "l",
+                  "ml"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "checked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked"
+          },
+          "already_have": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Already Have"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ShoppingItemPatch"
+      },
+      "ShoppingListOut": {
+        "properties": {
+          "merchant": {
+            "type": "string",
+            "title": "Merchant"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryOut"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShoppingItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "estimates": {
+            "items": {
+              "$ref": "#/components/schemas/EstimateOut"
+            },
+            "type": "array",
+            "title": "Estimates"
+          },
+          "items_total": {
+            "type": "integer",
+            "title": "Items Total"
+          },
+          "checked_count": {
+            "type": "integer",
+            "title": "Checked Count"
+          },
+          "already_have_excluded": {
+            "type": "integer",
+            "title": "Already Have Excluded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "merchant",
+          "categories",
+          "items",
+          "estimates",
+          "items_total",
+          "checked_count",
+          "already_have_excluded"
+        ],
+        "title": "ShoppingListOut"
+      },
+      "ShoppingMerchantIn": {
+        "properties": {
+          "merchant": {
+            "$ref": "#/components/schemas/Merchant"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "merchant"
+        ],
+        "title": "ShoppingMerchantIn"
+      },
       "StoredFilesDeleted": {
         "properties": {
           "files_deleted": {
@@ -5784,6 +6663,35 @@
           "files"
         ],
         "title": "StoredFilesOut"
+      },
+      "SuggestionOut": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "category_name": {
+            "type": "string",
+            "title": "Category Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "name",
+          "category",
+          "category_name"
+        ],
+        "title": "SuggestionOut"
       },
       "SummaryFilters": {
         "properties": {
