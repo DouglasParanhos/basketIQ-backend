@@ -19,6 +19,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from basketiq.app_config import describe_errors
+from basketiq.domain.categories import CATEGORY_IDS
 from basketiq.domain.grouping import Catalog, Node
 from basketiq.domain.status import Merchant
 
@@ -50,6 +51,7 @@ class NodeIn(_Strict):
     match: list[str] = Field(default_factory=list)
     exclude: list[str] = Field(default_factory=list)
     cases: Cases | None = None
+    list_category: str | None = None  # category of the shopping list; inherited by the nodes below
     children: list[NodeIn] = Field(default_factory=list)
 
 
@@ -80,6 +82,8 @@ def build(raw: CatalogIn) -> tuple[Catalog, dict[str, Cases]]:
         bases = tuple(n.bases) if n.bases else (parent.bases if parent else ())
         if is_group and n.comparable and not bases:
             raise CatalogError(f"{n.slug}: a comparable group needs bases (its own or inherited)")
+        if n.list_category is not None and n.list_category not in CATEGORY_IDS:
+            raise CatalogError(f"{n.slug}: unknown list_category {n.list_category!r}")
         unknown = [b for b in bases if b not in raw.plausible_sizes]
         if unknown:
             raise CatalogError(f"{n.slug}: bases without a plausible size range: {unknown}")
@@ -93,6 +97,7 @@ def build(raw: CatalogIn) -> tuple[Catalog, dict[str, Cases]]:
             is_group=is_group,
             match=_compile(n.match, n.slug),
             exclude=_compile(n.exclude, n.slug) + (parent.exclude if parent else ()),
+            list_category=n.list_category or (parent.list_category if parent else None),
         )
         nodes[n.slug] = node
         if is_group and n.cases:

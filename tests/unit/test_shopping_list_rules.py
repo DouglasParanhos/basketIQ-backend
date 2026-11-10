@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
 from basketiq.domain.categories import CATEGORY_IDS, categorize
-from basketiq.domain.expected_price import PricePoint, expected_price
+from basketiq.domain.expected_price import PricePoint, cost_cents, expected_price
 
 
 @pytest.mark.req("F-311")
@@ -74,3 +75,23 @@ def test_a_store_that_is_not_supported_is_never_the_chosen_one() -> None:
 @pytest.mark.req("F-312")
 def test_a_product_never_bought_has_no_price() -> None:
     assert expected_price("LIDL", {}) is None
+
+
+@pytest.mark.req("F-312")
+@pytest.mark.parametrize(
+    ("quantity", "unit", "basis", "cents", "cost"),
+    [
+        ("2", "un", "un", 150, 300),
+        ("2", None, "un", 150, 300),  # no unit on the list is a count
+        ("500", "g", "kg", 150, 75),
+        ("1500", "ml", "l", 100, 150),
+        ("0.75", "kg", "kg", 1000, 750),
+        ("2", "un", "kg", 1000, None),  # two of what? Never a guess
+        ("1", "kg", "l", 100, None),
+    ],
+)
+def test_an_item_costs_its_quantity_in_the_unit_of_the_price(
+    quantity: str, unit: str | None, basis: str, cents: int, cost: int | None
+) -> None:
+    price = PricePoint(cents, basis, date(2026, 11, 1), "LIDL", "Lidl")
+    assert cost_cents(Decimal(quantity), unit, price) == cost

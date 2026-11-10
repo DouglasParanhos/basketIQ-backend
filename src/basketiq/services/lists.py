@@ -18,11 +18,11 @@ from sqlalchemy.orm import Session
 from basketiq.api.errors import not_found
 from basketiq.db.models import Product, Receipt, ReceiptLine, ShoppingList, ShoppingListItem, UserProfile
 from basketiq.domain.categories import CATEGORIES, CATEGORY_IDS, CATEGORY_NAMES, OTHER, categorize
-from basketiq.domain.expected_price import PricePoint, Store, expected_price
-from basketiq.domain.money import multiply_cents
+from basketiq.domain.expected_price import PricePoint, Store, cost_cents, expected_price
+from basketiq.domain.grouping import Catalog, classify
 from basketiq.domain.normalization import normalize_key
 from basketiq.domain.status import MERCHANT_NAMES, SUPPORTED_MERCHANTS, Merchant, ReceiptStatus
-from basketiq.services import analytics, products
+from basketiq.services import analytics, groups, products
 
 UNDO_WINDOW = timedelta(
     days=1
@@ -156,7 +156,10 @@ def view(db: Session, user_id: uuid.UUID, tz: ZoneInfo) -> dict[str, Any]:
             found = expected_price(merchant.value, ladder(item))
             if found is not None:
                 point, from_other = found
-                total += multiply_cents(item.quantity, point.cents)
+                cost = cost_cents(item.quantity, item.unit, point)
+                if cost is None:
+                    continue  # the unit does not compare with the price's: left out, never guessed
+                total += cost
                 with_price += 1
                 other += from_other
         estimates.append(
@@ -206,9 +209,23 @@ def _linked_product(db: Session, user_id: uuid.UUID, name: str) -> Product | Non
     )
 
 
+def _category(
+    db: Session, user_id: uuid.UUID, catalog: Catalog, name: str, product_id: uuid.UUID | None
+) -> str:
+    """The list category of the product's step C group (with the person's own rules), else of what the
+    catalogue makes of the name, else the keywords. Every category the list gives goes through here."""
+    group = groups.product_group(db, user_id, product_id, catalog) if product_id else None
+    if group is None:
+        named = classify(name, None, catalog)
+        group = named.group or named.hint
+    found = catalog.nodes[group].list_category if group else None
+    return found or categorize(name)
+
+
 def add_item(
     db: Session,
     user_id: uuid.UUID,
+    catalog: Catalog,
     *,
     name: str,
     quantity: Decimal,
@@ -227,7 +244,7 @@ def add_item(
         list_id=lst.id,
         product_id=product.id if product else None,
         name=name,
-        category=category or categorize(name),
+        category=category or _category(db, user_id, catalog, name, product.id if product else None),
         quantity=quantity,
         unit=unit,
         already_have=already_have,
@@ -249,7 +266,7 @@ def _item(db: Session, user_id: uuid.UUID, item_id: uuid.UUID, *, removed: bool 
 
 
 def update_item(
-    db: Session, user_id: uuid.UUID, item_id: uuid.UUID, changes: dict[str, Any]
+    db: Session, user_id: uuid.UUID, catalog: Catalog, item_id: uuid.UUID, changes: dict[str, Any]
 ) -> ShoppingListItem:
     item = _item(db, user_id, item_id)
     renamed = "name" in changes and changes["name"] != item.name
@@ -261,7 +278,7 @@ def update_item(
         product = _linked_product(db, user_id, item.name)
         item.product_id = product.id if product else None
         if "category" not in changes:
-            item.category = categorize(item.name)
+            item.category = _category(db, user_id, catalog, item.name, item.product_id)
     return item
 
 
@@ -349,7 +366,7 @@ def evolution(
 
 
 def suggestions(
-    db: Session, user_id: uuid.UUID, today: date, window_days: int, tz_name: str
+    db: Session, user_id: uuid.UUID, catalog: Catalog, today: date, window_days: int, tz_name: str
 ) -> list[dict[str, Any]]:
     """«Para a próxima compra»: what the person buys most often, minus what is already on the list."""
     lst = get_list(db, user_id)
@@ -363,7 +380,7 @@ def suggestions(
         pid = uuid.UUID(article["product_id"])
         if pid in on_list or normalize_key(article["name"]) in on_list_keys:
             continue
-        category = categorize(article["name"])
+        category = _category(db, user_id, catalog, article["name"], pid)
         out.append(
             {
                 "product_id": pid,

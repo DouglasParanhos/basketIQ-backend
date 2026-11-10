@@ -8,13 +8,14 @@
 #
 # Rules are Python regular expressions over the description after normalisation (upper case, no accents, every
 # character other than A-Z, 0-9 and % turned into a space) and after the abbreviations below are expanded. `exclude`
-# also applies to every group under the node that declares it. `bases`: comparison bases in order of preference
+# also applies to every group under the node that declares it. `list_category`: the shopping list category
+# (domain/categories.py) of the node and of everything below it. `bases`: comparison bases in order of preference
 # (D1); each one needs a plausible range in `plausible_sizes` (D9). Inherited by the nodes below.
 #
 # Cases (D6): loose line descriptions only, never prices, dates or whole receipts; at least 3 that belong and 1 that
 # does not, per group. «CHAIN | description» reads the case as printed by that chain (its abbreviations apply).
 
-version: 1
+version: 2
 
 # Patterns used by more than one rule, declared once (YAML anchors; the loader ignores this key otherwise).
 patterns:
@@ -62,6 +63,7 @@ abbreviations:
 classes:
   - slug: frutas-e-legumes
     name: Frutas e legumes
+    list_category: frutas_legumes
     children:
       - slug: fruta
         name: Fruta
@@ -177,6 +179,7 @@ classes:
 
   - slug: talho
     name: Talho
+    list_category: talho
     bases: [kg]
     children:
       - slug: frango
@@ -230,9 +233,11 @@ classes:
 
   - slug: peixaria
     name: Peixaria
+    list_category: peixaria
 
   - slug: charcutaria-e-queijos
     name: Charcutaria e queijos
+    list_category: charcutaria
     bases: [kg]
     children:
       - slug: charcutaria
@@ -267,6 +272,7 @@ classes:
               not_belongs: [FOLHADO DE SALSICHA]
       - slug: queijos
         name: Queijos
+        list_category: laticinios_ovos  # the list keeps cheese with dairy
         match: ['\bQUEIJOS?\b']
         exclude: ['\b(PIZZA|PAO|TOSTA|TOSTAS|BOLACHAS?|SNACKS?)\b']
         children:
@@ -304,6 +310,7 @@ classes:
 
   - slug: laticinios-e-ovos
     name: Laticínios e ovos
+    list_category: laticinios_ovos
     children:
       - slug: leite
         name: Leite
@@ -360,6 +367,9 @@ classes:
 
   - slug: mercearia
     name: Mercearia
+    list_category: mercearia
+    # Only a hint (no group yet): sauces, tomato pulp and biscuits other than Maria are groceries.
+    match: ['\b(MOLHOS?|KETCHUP|MAIONESE|POLPA DE TOMATE|BOLACHAS?|TOSTAS)\b']
     children:
       - slug: arroz-massa-e-farinhas
         name: Arroz, massa e farinhas
@@ -475,9 +485,11 @@ classes:
 
   - slug: congelados
     name: Congelados
+    list_category: congelados
 
   - slug: padaria-e-pastelaria
     name: Padaria e pastelaria
+    list_category: padaria
     bases: [kg]
     children:
       - slug: pao-de-forma
@@ -508,6 +520,7 @@ classes:
 
   - slug: bebidas
     name: Bebidas
+    list_category: bebidas
     bases: [l]
     children:
       - slug: agua-sem-gas
@@ -541,6 +554,7 @@ classes:
 
   - slug: limpeza
     name: Limpeza
+    list_category: limpeza
     children:
       - slug: detergente-da-roupa-liquido
         name: Detergente da roupa líquido
@@ -553,6 +567,7 @@ classes:
 
   - slug: higiene-e-cuidado-pessoal
     name: Higiene e cuidado pessoal
+    list_category: higiene
     children:
       - slug: papel-higienico
         name: Papel higiénico
@@ -572,12 +587,15 @@ classes:
 
   - slug: bebe
     name: Bebé
+    list_category: bebe
 
   - slug: animais
     name: Animais
+    list_category: animais
 
   - slug: casa-e-outros
     name: Casa e outros
+    list_category: outros
     children:
       # Lines that are not products (deposits, shopping bags): always «não comparável», never «por agrupar».
       - slug: nao-produto

@@ -8,6 +8,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
+
+from basketiq.domain.money import multiply_cents, to_base_unit
 
 
 @dataclass(frozen=True)
@@ -38,3 +41,12 @@ def expected_price(
     if not last_by_store:
         return None
     return max(last_by_store.values(), key=lambda p: (p.day, p.merchant_name)), True
+
+
+def cost_cents(quantity: Decimal, unit: str | None, price: PricePoint) -> int | None:
+    """What `quantity` of the item costs at `price`, in the price's unit (g→kg, ml→l; no unit is a count).
+
+    None when the units do not compare (2 «un» against a price per kg): never a guess (constitution III).
+    """
+    amount, basis = to_base_unit(quantity, unit)
+    return multiply_cents(amount, price.cents) if basis == price.basis else None

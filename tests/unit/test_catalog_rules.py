@@ -112,6 +112,7 @@ def _write(tmp_path: Path, raw: dict[str, object]) -> Path:
         (lambda r: r["classes"][0]["children"][0]["children"][0].update(match=["("]), "regular expression"),
         (lambda r: r["classes"].append(dict(r["classes"][0])), "repeated slug"),
         (lambda r: r["abbreviations"].update(NOWHERE={"A": "B"}), "unknown chains"),
+        (lambda r: r["classes"][0].update(list_category="nowhere"), "unknown list_category"),
         (lambda r: r["classes"][0]["children"][0].update(bases=["caixa"]), "plausible size range"),
         (
             lambda r: r["classes"].append(

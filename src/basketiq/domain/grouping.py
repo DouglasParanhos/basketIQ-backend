@@ -34,6 +34,7 @@ class Node:
     is_group: bool
     match: tuple[re.Pattern[str], ...]
     exclude: tuple[re.Pattern[str], ...]  # this node's and its ancestors'
+    list_category: str | None = None  # category of the shopping list (inherited)
 
 
 @dataclass(frozen=True)

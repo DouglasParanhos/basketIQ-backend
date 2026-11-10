@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query
 
 from basketiq.api.deps import ConsentedUser, Db, SettingsDep, Today, csrf_protect
 from basketiq.api.errors import ApiError
-from basketiq.api.routers.config import AppConfigDep
+from basketiq.api.routers.config import AppConfigDep, CatalogDep
 from basketiq.api.schemas import (
     EvolutionOut,
     ListArticlesOut,
@@ -69,8 +69,10 @@ def choose_merchant(
 @router.post(
     "/current/items", response_model=ShoppingListOut, status_code=201, summary="Add a product to the list"
 )
-def add_item(body: ShoppingItemIn, db: Db, settings: SettingsDep, user: ConsentedUser) -> ShoppingListOut:
-    lists.add_item(db, user.id, **body.model_dump())
+def add_item(
+    body: ShoppingItemIn, db: Db, settings: SettingsDep, catalog: CatalogDep, user: ConsentedUser
+) -> ShoppingListOut:
+    lists.add_item(db, user.id, catalog, **body.model_dump())
     return _list(db, settings, user)
 
 
@@ -78,9 +80,14 @@ def add_item(body: ShoppingItemIn, db: Db, settings: SettingsDep, user: Consente
     "/current/items/{item_id}", response_model=ShoppingListOut, summary="Edit, tick or mark «já tenho»"
 )
 def edit_item(
-    item_id: uuid.UUID, body: ShoppingItemPatch, db: Db, settings: SettingsDep, user: ConsentedUser
+    item_id: uuid.UUID,
+    body: ShoppingItemPatch,
+    db: Db,
+    settings: SettingsDep,
+    catalog: CatalogDep,
+    user: ConsentedUser,
 ) -> ShoppingListOut:
-    lists.update_item(db, user.id, item_id, body.model_dump(exclude_unset=True))
+    lists.update_item(db, user.id, catalog, item_id, body.model_dump(exclude_unset=True))
     return _list(db, settings, user)
 
 
@@ -120,7 +127,12 @@ def evolution(
 
 @router.get("/current/suggestions", response_model=list[SuggestionOut], summary="«Para a próxima compra»")
 def suggestions(
-    db: Db, settings: SettingsDep, config: AppConfigDep, user: ConsentedUser, today: Today
+    db: Db,
+    settings: SettingsDep,
+    config: AppConfigDep,
+    catalog: CatalogDep,
+    user: ConsentedUser,
+    today: Today,
 ) -> list[SuggestionOut]:
-    found = lists.suggestions(db, user.id, today, config.comparison_window_days, settings.timezone)
+    found = lists.suggestions(db, user.id, catalog, today, config.comparison_window_days, settings.timezone)
     return [SuggestionOut.model_validate(s) for s in found]
