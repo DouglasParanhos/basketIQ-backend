@@ -45,6 +45,12 @@ class AppConfig(BaseModel):
     llm_enabled: StrictBool = Field(alias="LLM_ENABLED")
     smart_list_enabled: StrictBool = Field(alias="SMART_LIST_ENABLED")
     comparison_window_days: StrictInt = Field(alias="COMPARISON_WINDOW_DAYS", ge=7, le=366)
+    # Step C (D11, D12, D13).
+    comparison_min_purchases: StrictInt = Field(alias="COMPARISON_MIN_PURCHASES", ge=1, le=20)
+    comparison_difference_pct: StrictInt = Field(alias="COMPARISON_DIFFERENCE_PCT", ge=1, le=100)
+    comparison_min_effect_cents: StrictInt = Field(alias="COMPARISON_MIN_EFFECT_CENTS", ge=0, le=10_000)
+    comparison_min_chains: StrictInt = Field(alias="COMPARISON_MIN_CHAINS", ge=2, le=7)
+    to_complete_page_size: StrictInt = Field(alias="TO_COMPLETE_PAGE_SIZE", ge=1, le=100)
     # Home ring (RF-15): green up to this percentage of the goal, orange up to the next one, red above.
     goal_ring_green_up_to_pct: StrictInt = Field(alias="GOAL_RING_GREEN_UP_TO_PCT", ge=1)
     goal_ring_orange_up_to_pct: StrictInt = Field(alias="GOAL_RING_ORANGE_UP_TO_PCT", le=100)
@@ -56,6 +62,11 @@ class AppConfig(BaseModel):
         if self.goal_ring_green_up_to_pct >= self.goal_ring_orange_up_to_pct:
             raise ValueError("GOAL_RING_GREEN_UP_TO_PCT: must be lower than GOAL_RING_ORANGE_UP_TO_PCT")
         return self
+
+
+def describe_errors(exc: ValidationError) -> str:
+    """One line per problem, `KEY: message`, for a start-up error about a configuration file."""
+    return "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
 
 
 def config_path() -> Path:
@@ -82,8 +93,7 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     try:
         return AppConfig.model_validate(raw)
     except ValidationError as exc:
-        problems = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
-        raise AppConfigError(f"Invalid configuration in {path.name}: {problems}") from exc
+        raise AppConfigError(f"Invalid configuration in {path.name}: {describe_errors(exc)}") from exc
 
 
 @lru_cache

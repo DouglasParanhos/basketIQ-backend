@@ -40,6 +40,8 @@ from basketiq.api.schemas import (
     VersionIn,
     WarningOut,
 )
+from basketiq.app_config import get_app_config
+from basketiq.catalog import get_catalog
 from basketiq.config import Settings, get_settings
 from basketiq.db.models import Receipt, ReceiptLine
 from basketiq.domain.status import (
@@ -52,6 +54,7 @@ from basketiq.domain.status import (
 from basketiq.pipeline.quality import WARNING_MESSAGES
 from basketiq.pipeline.validation import ALLOWED_MIMES
 from basketiq.queue import JobQueue, get_queue
+from basketiq.services import groups
 from basketiq.services import receipts as svc
 from basketiq.storage import ObjectStorage, get_storage
 
@@ -420,6 +423,8 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
             code=receipt.error_code, message=reason.get("message"), action=ERROR_ACTIONS.get(status)
         )
 
+    # Step C (spec 010): groups and «above/below what you usually pay», only once the receipt is confirmed.
+    grouping, ungrouped = groups.receipt_lines_check(db, receipt, get_catalog(), get_app_config())
     lines = []
     for i, line in enumerate(receipt.lines):
         flags = evaluation.line_flags.get(i, []) if evaluation else []
@@ -449,6 +454,7 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
                 manually_edited=line.manually_edited,
                 edited_fields=list(line.edited_fields or []),
                 evidence=list(evidence.get("lines", [])),
+                grouping=grouping.get(line.id),
             )
         )
 
@@ -497,6 +503,7 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
         )
         if job
         else None,
+        ungrouped_descriptions=ungrouped,
         version=receipt.version,
         created_at=receipt.created_at,
         updated_at=receipt.updated_at,

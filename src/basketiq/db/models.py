@@ -293,6 +293,33 @@ class ProductAlias(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
+class UserLineRule(Base):
+    """What one user decided for a (chain, normalised description) in «Por completar» (step C, D13).
+
+    Private to the user and never fed into the catalogue; it beats the catalogue for that user's lines,
+    past and future, so applying or removing it is retroactive without touching the receipts.
+    """
+
+    __tablename__ = "user_line_rules"
+    __table_args__ = (
+        UniqueConstraint("user_id", "chain", "description_key", name="uq_user_line_rule"),
+        CheckConstraint("NOT (not_comparable AND group_slug IS NOT NULL)", name="ck_user_line_rule_group"),
+        CheckConstraint("(size_value IS NULL) = (size_unit IS NULL)", name="ck_user_line_rule_size"),
+    )
+    __mapper_args__ = {"eager_defaults": True}  # dates come back with the INSERT, not a second query  # noqa: RUF012
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    chain: Mapped[str] = mapped_column(String(32))  # Receipt.merchant, "" when the receipt has none
+    description_key: Mapped[str] = mapped_column(String(255))  # normalize_key(raw_description)
+    group_slug: Mapped[str | None] = mapped_column(String(64))
+    not_comparable: Mapped[bool] = mapped_column(Boolean, default=False)
+    size_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    size_unit: Mapped[str | None] = mapped_column(String(8))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
     __table_args__ = (

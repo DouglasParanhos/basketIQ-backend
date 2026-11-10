@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 
 from basketiq.api.deps import ConsentedUser, Db, SettingsDep, Today
 from basketiq.api.errors import ApiError, FieldError
-from basketiq.api.routers.config import AppConfigDep
+from basketiq.api.routers.config import AppConfigDep, CatalogDep
 from basketiq.api.schemas import (
     ConsumptionOut,
     MonthTotalOut,
@@ -19,7 +19,7 @@ from basketiq.api.schemas import (
 )
 from basketiq.domain.status import Merchant
 from basketiq.observability import metrics
-from basketiq.services import analytics
+from basketiq.services import analytics, groups
 from basketiq.services.products import get_visible
 
 router = APIRouter(prefix="/v1", tags=["analytics"])
@@ -142,6 +142,7 @@ def product_analytics(
     product_id: uuid.UUID,
     db: Db,
     settings: SettingsDep,
+    catalog: CatalogDep,
     user: ConsentedUser,
     date_from: Annotated[date | None, Query(alias="from")] = None,
     date_to: Annotated[date | None, Query(alias="to")] = None,
@@ -152,6 +153,6 @@ def product_analytics(
         raise ApiError(404, "not_found", "Produto não encontrado.")
     f = _filters(date_from, date_to, merchant, product_id) if date_from and date_to else None
     metrics.ANALYTICS_REQUESTS.labels("product", str(merchant is not None), "True").inc()
-    return ProductAnalyticsOut.model_validate(
-        analytics.product_analytics(db, user.id, product, f, settings.timezone)
-    )
+    result = analytics.product_analytics(db, user.id, product, f, settings.timezone)
+    group = groups.group_ref(catalog, groups.product_group(db, user.id, product.id, catalog))
+    return ProductAnalyticsOut.model_validate({**result, "group": group})

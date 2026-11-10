@@ -1,0 +1,589 @@
+# Product catalogue (step C, D1–D6 of RASCUNHO_decisoes_spec010, approved on 2026-11-08). Single source of the
+# group rules: a change goes in by commit, with the rule and its cases in the same commit (D8). The API reads this
+# file at start-up and refuses to start if it is invalid (basketiq.catalog). Raise `version` whenever a rule changes.
+#
+# Tree: the 15 classes of Funcional v1.5 §12.1 at the top (only for navigation, never a spending category), nodes in
+# between, groups at the leaves. Only a group is compared. A description matching two groups, or none, is left «por
+# agrupar» (D2b); one matching only a node keeps the node as a hint. Brand is never part of a rule (D2c).
+#
+# Rules are Python regular expressions over the description after normalisation (upper case, no accents, every
+# character other than A-Z, 0-9 and % turned into a space) and after the abbreviations below are expanded. `exclude`
+# also applies to every group under the node that declares it. `bases`: comparison bases in order of preference
+# (D1); each one needs a plausible range in `plausible_sizes` (D9). Inherited by the nodes below.
+#
+# Cases (D6): loose line descriptions only, never prices, dates or whole receipts; at least 3 that belong and 1 that
+# does not, per group. «CHAIN | description» reads the case as printed by that chain (its abbreviations apply).
+
+version: 1
+
+# Patterns used by more than one rule, declared once (YAML anchors; the loader ignores this key otherwise).
+patterns:
+  # A bag with two of these vegetables is a mixture, not one vegetable.
+  mixed_veg: &mixed_veg '\b(BROCOLOS?|COUVE FLOR|CENOURAS?)\b.*\b(BROCOLOS?|COUVE FLOR|CENOURAS?)\b'
+
+# D9: a size outside these limits counts as missing. One package, in the base unit.
+plausible_sizes:
+  kg: ["0.005", "30"]
+  l: ["0.01", "20"]
+  un: ["1", "200"]
+  rolo: ["1", "64"]
+  dose: ["1", "200"]
+
+# D5: expansions, by whole word. A chain's entry beats the one under `all`.
+abbreviations:
+  all:
+    QJ: QUEIJO
+    IOG: IOGURTE
+    FRG: FRANGO
+    BOV: BOVINO
+    FRS: FRESCO
+    RAL: RALADO
+    LGHT: LIGHT
+    CHOCOLAT: CHOCOLATE
+    PIC: PICADA
+    FAT: FATIAS
+    LIQ: LIQUIDO
+    DET: DETERGENTE
+  PINGO_DOCE:
+    MNT: MANTEIGA
+    I: IOGURTE
+    B: BOLACHA
+    BAT: BATATA
+    FL: FLOR
+    BR: BROCOLOS
+    CE: CENOURA
+    LINHA: MASSA LINHA
+    CONG: CONGELADO
+  MERCADONA:
+    Q: QUEIJO
+    BROC: BROCOLOS
+    CEN: CENOURA
+
+classes:
+  - slug: frutas-e-legumes
+    name: Frutas e legumes
+    children:
+      - slug: fruta
+        name: Fruta
+        bases: [kg]
+        match: ['\bFRUTAS?\b']
+        children:
+          - slug: banana
+            name: Banana
+            match: ['\bBANANAS?\b']
+            exclude: ['\b(CHIPS|SECA|DESIDRATADA|IOGURTE|BATIDO|SUMO|NECTAR)\b']
+            cases:
+              belongs: [BANANA, BANANA DA MADEIRA, BANANAS CAT I]
+              not_belongs: [CHIPS DE BANANA 100G]
+          - slug: maca
+            name: Maçã
+            match: ['\bMACAS?\b']
+            exclude: ['\b(SIDRA|SUMO|NECTAR|COMPOTA|PURE|VINAGRE|CHIPS|DOCE)\b']
+            cases:
+              belongs: [MAÇÃ PINK, MACA GALA KG, MAÇÃS ROYAL GALA 1KG]
+              not_belongs: [SIDRA DE MAÇÃ 50CL, SUMO DE MAÇÃ 1L]
+          - slug: laranja
+            name: Laranja
+            match: ['\bLARANJAS?\b']
+            exclude: ['\b(SUMO|NECTAR|DOCE|COMPOTA|REFRIGERANTE|SABOR|BEBIDA|GELADO|SUMOL)\b']
+            cases:
+              belongs: [LARANJA, LARANJA DO ALGARVE, LARANJAS 3KG]
+              not_belongs: [SUMO DE LARANJA 1L]
+      - slug: legumes
+        name: Legumes
+        bases: [kg]
+        children:
+          - slug: tomate
+            name: Tomate (redondo, alongado e em ramo)
+            match: ['\bTOMATES?\b']
+            exclude: ['\b(MOLHO|POLPA|PELADO|CONCENTRADO|PASSATA|SECO|CHERRY|CEREJA|KETCHUP|RUCULA|PIZZA|SUMO|SARDINHA|PETINGA|SAN MARZANO|TRITURADO)\b']
+            cases:
+              belongs: [TOMATE ALONGADO, TOMATE REDONDO KG, TOMATE EM RAMO]
+              not_belongs: [TOMATE CHERRY 250G, MOLHO DE TOMATE, TOMATE SAN MARZANO 400G]
+          - slug: batata
+            name: Batata
+            match: ['\bBATATAS?\b']
+            exclude: ['\b(DOCE|DOCES|PALHA|FRITA|FRITAS|CHIPS|PURE|GNOCCHI|RUSTICAS|ENCARACOLADA|TORTILHA|CONGELADO|PALITOS)\b']
+            cases:
+              belongs: ['BATATA BRANCA 2,5KG', PINGO_DOCE | BAT QUAR ASSAR PD1KG, BATATA VERMELHA KG]
+              not_belongs: [BATATA DOCE 1KG, BATATA PALHA LIGHT, PURE DE BATATA]
+          - slug: batata-doce
+            name: Batata-doce
+            match: ['\bBATATAS? DOCES?\b']
+            exclude: ['\b(CHIPS|FRITA|FRITAS|PURE)\b']
+            cases:
+              belongs: [BATATA DOCE, BATATA DOCE 1KG, BATATA-DOCE KG]
+              not_belongs: [CHIPS DE BATATA DOCE 100G]
+          - slug: cebola
+            name: Cebola
+            match: ['\bCEBOLAS?\b']
+            exclude: ['\b(PICADA|FRITA|CREME|SOPA|TORTILHA|CONGELADO|ANEIS)\b']
+            cases:
+              belongs: [CEBOLA DOCE 500G, CEBOLA KG, CEBOLAS 2KG]
+              not_belongs: [CEBOLA PICADA, CEBOLA FRITA 100G]
+          - slug: cenoura
+            name: Cenoura
+            match: ['\bCENOURAS?\b']
+            exclude: ['\b(SUMO|SOPA|CREME|BOLO)\b', *mixed_veg]
+            cases:
+              belongs: [CENOURA 2KG, CENOURA KG, CENOURAS BIO 1KG]
+              not_belongs: [COUVE FLOR BROCOLOS CENOURA 1KG, SUMO DE CENOURA]
+          - slug: brocolos
+            name: Brócolos
+            match: ['\bBROCOLOS?\b']
+            exclude: ['\b(CONGELADO|CONGELADOS|SOPA|CREME)\b', *mixed_veg]
+            cases:
+              belongs: [BRÓCOLOS, BROCOLO 500 G, BIO BROCOLO 400 G]
+              not_belongs: [PINGO_DOCE | BROCOLOS CONG PD400G, PINGO_DOCE | COUVE FL BR CE PD1KG]
+          - slug: couve-flor
+            name: Couve-flor
+            match: ['\bCOUVE FLOR\b']
+            exclude: [*mixed_veg]
+            cases:
+              belongs: [COUVE FLOR, COUVE-FLOR, COUVE FLOR KG]
+              not_belongs: [MERCADONA | COUVE-FLOR/BROC/CEN, COUVE PORTUGUESA]
+          - slug: curgete
+            name: Curgete
+            match: ['\bCURGETES?\b']
+            exclude: ['\b(ESPARGUETE|ESPIRAIS|CREME|SOPA)\b']
+            cases:
+              belongs: [CURGETE, CURGETE KG, CURGETES BIO 500G]
+              not_belongs: [CREME DE CURGETE 1L]
+          - slug: cogumelos
+            name: Cogumelos
+            match: ['\bCOGUMELOS?\b']
+            exclude: ['\b(CREME|SOPA|MOLHO|PIZZA)\b']
+            cases:
+              belongs: [COGUMELOS MARRON 300G, COGUMELO SHITAKE 200 G, COGUMELOS BRANCOS 250G]
+              not_belongs: [CREME DE COGUMELOS]
+          - slug: mistura-de-legumes
+            name: Mistura de legumes
+            match: ['\bMISTURA DE LEGUMES\b', '\bSALTEADO DE LEGUMES\b', *mixed_veg]
+            exclude: ['\b(SOPA|CREME)\b']
+            cases:
+              belongs: [MERCADONA | COUVE-FLOR/BROC/CEN, PINGO_DOCE | COUVE FL BR CE PD1KG, MISTURA DE LEGUMES 1KG]
+              not_belongs: [BROCOLOS, SOPA DE LEGUMES]
+      - slug: saladas
+        name: Saladas
+        bases: [kg]
+        children:
+          - slug: alface-e-saladas
+            name: Alface e saladas embaladas
+            match: ['\bALFACES?\b', '\bSALADA (ICEBERGUE|ICEBE|ICEBERG|FAMILIAR|AROMATICA|MISTA|BABY)\b', '\bMISTURA DE SALADAS?\b']
+            exclude: ['\b(CAMPONESA|RUSSA|FRUTA|MASSA|ATUM|FRANGO|POLVO|GRAO)\b']
+            cases:
+              belongs: [ALFACE FRISADA 125G, SALADA ICEBERGUE, SALADA ICEBE 300G PD, SALADA FAMILIAR 300]
+              not_belongs: [SALADA CAMPONESA 200G, SALADA DE FRUTA]
+
+  - slug: talho
+    name: Talho
+    bases: [kg]
+    children:
+      - slug: frango
+        name: Frango
+        match: ['\bFRANGO\b']
+        exclude: ['\b(PANADO|PANADOS|NUGGETS|CHUNKS|FIAMBRE|COZIDO|ASSADO|DESFIADO|CORDON|CROQUETES?|RISSOIS)\b']
+        children:
+          - slug: frango-inteiro
+            name: Frango inteiro
+            match: ['\bFRANGO INTEIRO\b']
+            cases:
+              belongs: [FRANGO INTEIRO, FRANGO INTEIRO KG, FRANGO INTEIRO DO CAMPO]
+              not_belongs: [PEITO DE FRANGO]
+          - slug: frango-peito-e-lombinhos
+            name: 'Frango: peito e lombinhos'
+            match: ['(?=.*\bFRANGO\b)(?=.*\b(PEITO|PEITOS|LOMBINHOS?|BIFES?)\b)']
+            cases:
+              belongs: [LOMBINHOS DE FRANGO, PEITO DE FRANGO, FRG PEITO ATP PD FAM, FRANGO LOMBINHOS ATP]
+              not_belongs: [PEITO PERU COLOCADO A MAO, NUGGETS DE FRANGO PANADOS]
+          - slug: frango-coxas-perna-e-asas
+            name: 'Frango: coxas, perna e asas'
+            match: ['(?=.*\bFRANGO\b)(?=.*\b(COXAS?|PERNAS?|ASAS|ASINHAS|SOBRECOXAS?)\b)']
+            cases:
+              belongs: [COXA FRANGO EMBALAGEM FAM., ASINHAS FRANGO 750G, PERNAS DE FRANGO KG]
+              not_belongs: [COXINHAS F F PD 9X40]
+      - slug: vaca-e-porco
+        name: Vaca e porco
+        match: ['\b(BOVINO|NOVILHO|VITELA|VACA|PORCO|SUINO|ANGUS)\b']
+        exclude: ['\b(HAMBURGUER|HAMBURGUERES|ALMONDEGAS|RISSOIS|CROQUETES?)\b']
+        children:
+          - slug: carne-picada-de-vaca
+            name: Carne picada de vaca
+            match: ['\bPICADA\b.*\b(VACA|BOVINO|NOVILHO|VITELA)\b']
+            exclude: ['\b(MISTA|MISTO|PORCO)\b']
+            cases:
+              belongs: [CARNE PICADA DE VACA, CARNE PICADA BOVINO 500G, CARNE PICADA DE NOVILHO KG]
+              not_belongs: [PREPARADO CARNE PIC MISTO]
+          - slug: carne-picada-mista
+            name: Carne picada mista
+            match: ['\bCARNE\b.*\bMIST[AO]\b']
+            cases:
+              belongs: ['P. CARNE PIC. MISTA, 5', PREPARADO CARNE PIC MISTO, MERCADONA | PREPAR. CARNE MISTA]
+              not_belongs: [CARNE PICADA DE VACA]
+          - slug: bovino-bifes
+            name: Bovino (bifes)
+            match: ['(?=.*\b(BIFES?|VAZIA|ACEM|ALCATRA)\b)(?=.*\b(BOVINO|NOVILHO|VITELA|VACA|ANGUS)\b)']
+            exclude: ['\bPICADA\b']
+            cases:
+              belongs: [BIFE DA VAZIA DE ANGUS, BIFE DA VAZIA DE NOVILHO, BOV VAZIA AM SUL]
+              not_belongs: ['BIFE DE ATUM, KG', HAMBURGUER ANGUS]
+
+  - slug: peixaria
+    name: Peixaria
+
+  - slug: charcutaria-e-queijos
+    name: Charcutaria e queijos
+    bases: [kg]
+    children:
+      - slug: charcutaria
+        name: Charcutaria
+        children:
+          - slug: fiambre
+            name: Fiambre
+            match: ['\bFIAMBRE\b']
+            exclude: ['\b(PERU|FRANGO)\b']
+            cases:
+              belongs: [FIAMBRE FINISSIMO 150G, FIAMBRE DE PERNA EXTRA 200G, FIAMBRE DA PA 150G]
+              not_belongs: [FIAMBRE PERU L 120G]
+          - slug: fiambre-de-aves
+            name: Fiambre de peru e de frango
+            match: ['\bFIAMBRE\b.*\b(PERU|FRANGO)\b', '\bPEITO (DE )?PERU\b']
+            cases:
+              belongs: [FIAMBRE PERU L 120G, PEITO PERU COLOCADO A MAO, FIAMBRE DE PERU FATIAS 200G]
+              not_belongs: [FIAMBRE FINISSIMO 150G]
+          - slug: presunto
+            name: Presunto
+            match: ['\bPRESUNTO\b']
+            exclude: ['\b(PIZZA|CROQUETES?|FOLHADO|BROA)\b']
+            cases:
+              belongs: [PRESUNTO SAN DANIELE, PRESUNTO 9M TAP 250G, PRESUNTO SERRANO FATIAS 100G]
+              not_belongs: [CROQUETES DE PRESUNTO]
+          - slug: salsichas
+            name: Salsichas
+            match: ['\bSALSICHAS?\b']
+            exclude: ['\b(FOLHADO|FOLHADOS|PAO)\b']
+            cases:
+              belongs: [SALSICHAS HOT DOG 300G, SALSICHA SILESI 400G, 'SALSICHA PICANTE, 230G']
+              not_belongs: [FOLHADO DE SALSICHA]
+      - slug: queijos
+        name: Queijos
+        match: ['\bQUEIJOS?\b']
+        exclude: ['\b(PIZZA|PAO|TOSTA|TOSTAS|BOLACHAS?|SNACKS?)\b']
+        children:
+          - slug: queijo-fresco
+            name: Queijo fresco
+            match: ['\bQUEIJO FRESCO\b']
+            cases:
+              belongs: [QUEIJO FRESCO MAGRO MATINAL, QJ FRS MAT LGHT 3X72, QUEIJO FRESCO 200G]
+              not_belongs: [QUEIJO FETA ORIGINAL]
+          - slug: queijo-flamengo
+            name: Queijo flamengo (barra e fatias)
+            match: ['\bFLAMENGO\b']
+            cases:
+              belongs: [QUEIJO FLAMENGO EM FAT, QJ FLAMENGO FATIAS 200G, QUEIJO FLAMENGO BARRA KG]
+              not_belongs: [QUEIJO DE CABRA FATIADO]
+          - slug: queijo-ralado
+            name: Queijo ralado
+            match: ['(?=.*\bQUEIJOS?\b)(?=.*\bRALADO\b)']
+            cases:
+              belongs: [QJ PARM RAL PD 60G, MERCADONA | Q.RALADO MOZZARELLA, QUEIJO MOZZARELLA LIGHT RAL]
+              not_belongs: ['QUEIJO MOZZARELLA, 125']
+          - slug: queijo-mozzarella
+            name: Queijo mozzarella
+            match: ['\bMOZZARELLA\b']
+            exclude: ['\bRALADO\b']
+            cases:
+              belongs: ['QUEIJO MOZZARELLA, 125', MOZZARELLA FRESCA 125G, QJ MOZZARELLA BUFALA 125G]
+              not_belongs: [QUEIJO MOZZARELLA LIGHT RAL]
+          - slug: queijo-de-cabra-fatiado
+            name: Queijo de cabra fatiado
+            match: ['\bQUEIJO (DE )?CABRA\b.*\b(FATIAS|FATIADO)\b']
+            cases:
+              belongs: [QJ CABRA FATIAS 150G, QJ CABRA FAT PD 150G, QUEIJO DE CABRA FATIADO]
+              not_belongs: [QUEIJO DE CABRA CURADO]
+
+  - slug: laticinios-e-ovos
+    name: Laticínios e ovos
+    children:
+      - slug: leite
+        name: Leite
+        bases: [l]
+        exclude: ['\b(CHOCOLATE|ACHOCOLATADO|AROMATIZADO|MORANGO|BAUNILHA|CAFE|SOJA|AVEIA|AMENDOA|ARROZ)\b']
+        children:
+          - slug: leite-uht
+            name: Leite UHT
+            match: ['\b(LEITE|L) UHT\b', '(?=.*\bLEITE\b)(?=.*\bUHT\b)']
+            exclude: ['\bLACTOSE\b']
+            cases:
+              belongs: ['LEITE UHT GORDO, 1L', LEITE MEIO GORDO UHT, L UHT M/G 1L, LEITE UHT MAGRO 6X1L]
+              not_belongs: [LEITE COM CHOCOLATE GARRAFA, LEITE UHT SEM LACTOSE 1L, LEITE CHOCOLAT PD 1L, LEITE UHT MORANGO 6X200ML]
+          - slug: leite-uht-sem-lactose
+            name: Leite UHT sem lactose
+            match: ['\b(LEITE|UHT)\b.*\b(SEM|S|ZERO) LACTOSE\b', '\b(SEM|S|ZERO) LACTOSE\b.*\bLEITE\b']
+            cases:
+              belongs: [LEITE UHT SEM LACTOSE 1L, LEITE S/LACTOSE M/G 1L, LEITE MEIO GORDO SEM LACTOSE 6X1L]
+              not_belongs: [LEITE UHT MEIO GORDO 1L]
+      - slug: ovos
+        name: Ovos
+        bases: [un]
+        children:
+          - slug: ovos-galinha
+            name: Ovos
+            match: ['\bOVOS?\b']
+            exclude: ['\b(CHOCOLATE|PASCOA|KINDER|MOLES|CODORNIZ|TORTILHA|MASSA|MASSAS)\b']
+            cases:
+              belongs: [OVOS DO SOLO CL. L. 12, 24 OVOS FRESCOS, OVO L SOLO PD 12UN, OVOS L DE GALINHAS CRI SOLO]
+              not_belongs: [OVOS DE CHOCOLATE 100G, MASSA COM OVOS 500G]
+      - slug: iogurtes
+        name: Iogurtes
+        bases: [kg]
+        match: ['\b(IOGURTES?|GREGO|SKYR)\b']
+        children:
+          - slug: iogurte-natural
+            name: Iogurte natural
+            match: ['\bIOGURTES?\b.*\bNATURA(L|IS)\b']
+            exclude: ['\b(GREGO|LIQUIDO|BEBER|MORANGO|AROMAS|FRUTOS|MARACUJA|PESSEGO|COCO|BAUNILHA)\b']
+            cases:
+              belongs: [IOGURTE NATURAL 4X125G, IOG NATURAL PD 4X120G, IOGURTE NATURAL SOLIDO 1KG]
+              not_belongs: ['IOGURTE GREGO 10%, 1', IOG LIQ ACTIVIA4X155]
+      - slug: gorduras
+        name: Manteiga e gorduras
+        bases: [kg]
+        children:
+          - slug: manteiga
+            name: Manteiga
+            match: ['\bMANTEIGA\b']
+            exclude: ['\b(CROISSANT|CROISSANTS|BOLACHA|BOLACHAS|PAO|AMENDOIM|PRETZEL|PLANTA|SABOR|BISCOITOS?|BRIOCHE|FOLHADO|CAJU|AMENDOA|ALHO)\b']
+            cases:
+              belongs: [MANTEIGA COM SAL 250G, PINGO_DOCE | MNT MIMOSA LIGHT250G, MANTEIGA MIMOSA SEM SAL 250G]
+              not_belongs: [CROISSANT DE MANTEIGA, PLANTA SAB. MANTEIGA 250G]
+
+  - slug: mercearia
+    name: Mercearia
+    children:
+      - slug: arroz-massa-e-farinhas
+        name: Arroz, massa e farinhas
+        bases: [kg]
+        children:
+          - slug: arroz-agulha-e-carolino
+            name: Arroz agulha e carolino
+            match: ['\bARROZ\b.*\b(AGULHA|CAROLINO)\b']
+            exclude: ['\b(BASMATI|VAPORIZADO|PRONTO|DOCE|BOLACHAS?|TAILANDES|ARBORIO|INTEGRAL)\b']
+            cases:
+              belongs: [ARROZ EXTRA CAROLINO 1, ARROZ AGULHA 1KG, ARROZ CAROLINO CIGALA 1KG]
+              not_belongs: [ARROZ BASMATI 1KG, ARROZ DOCE]
+          - slug: massa-seca
+            name: Massa seca
+            match: ['\b(MASSA|ESPARGUETE|SPAGHETTI|FUSILLI|FUSILLONI|PENNE|MACARRAO|MACARRONETE|COTOVELOS|LACINHOS|PACCHERI|RIGATONI|TAGLIATELLE|TALHARIM|ESPIRAIS|MEADA|LINGUINE|FARFALLE)\b']
+            exclude: ['\b(FRESCA|FRESCAS|LASANHA|RECHEADA|PIZZA|FOLHADA|QUEBRADA|PAO|GNOCCHI|TORTELLINI|RAVIOLI|SALADA|OVOS)\b']
+            cases:
+              belongs: [FUSILLI, PACCHERI RIGA, ESPARGUETE 500G, PINGO_DOCE | LINHA PD 500 G]
+              not_belongs: [MASSA FRESCA TAGLIATELLE 250G, 'MASSAS DE TEMPERO, 200', GNOCCHI DE BATATA]
+          - slug: farinha-de-trigo
+            name: Farinha de trigo
+            match: ['\bFARINHA\b']
+            exclude: ['\b(MILHO|KIMILHO|ARROZ|AVEIA|AMENDOA|COCO|CENTEIO|MANDIOCA|GRAO|ALFARROBA)\b']
+            cases:
+              belongs: [FARINHA TIPO 65 1KG, FARINHA DE TRIGO 1KG, FARINHA SEM FERMENTO 1KG]
+              not_belongs: [FARINHA FERB KIMILHO]
+      - slug: acucar
+        name: Açúcar
+        bases: [kg]
+        children:
+          - slug: acucar-branco-e-amarelo
+            name: Açúcar
+            match: ['\bACUCAR\b']
+            exclude: ['\b(SEM|S|ZERO) ACUCAR\b', '\b(DOCE|BOLACHAS?|GOMAS|REFRIGERANTE|CHOCOLATE|CEREAIS|ALGODAO|BEBIDA)\b']
+            cases:
+              belongs: [ACUCAR BRANCO 1KG, AÇÚCAR AMARELO 1KG, ACUCAR REFINADO 1KG]
+              not_belongs: [DOCE SEM ACUCAR MORANGO]
+      - slug: oleos
+        name: Azeite e óleos
+        bases: [l]
+        exclude: ['\b(ATUM|PETINGA|SARDINHAS?|CAVALA|AZEITONAS?|BOLACHAS?|PAO|SPRAY|BACALHAU|POLVO|BATATA|EM)\b']
+        children:
+          - slug: azeite
+            name: Azeite
+            match: ['\bAZEITE\b']
+            cases:
+              belongs: [AZEITE VIRGEM EXTRA 750ML, AZEITE GALLO 1L, 'AZEITE CLASSICO 0,75L']
+              not_belongs: [ATUM AZEITE X4, PETINGA AZEITE P2]
+          - slug: oleo-alimentar
+            name: Óleo alimentar
+            match: ['\bOLEO\b']
+            exclude: ['\b(MOTOR|CORPO|BEBE|MASSAGEM|ESSENCIAL|COCO|SOLAR|PEIXE|OMEGA)\b']
+            cases:
+              belongs: [OLEO ALIMENTAR 1L, OLEO DE GIRASSOL 1L, OLEO FULA 1L]
+              not_belongs: [ATUM EM OLEO 3X80G, OLEO DE BEBE 200ML]
+      - slug: leguminosas
+        name: Leguminosas
+        bases: [kg]
+        children:
+          - slug: grao-de-bico
+            name: Grão-de-bico
+            match: ['\bGRAO( DE)? BICO\b']
+            exclude: ['\b(CHIPS|HUMUS|HUMMUS|SALADA|FARINHA)\b']
+            cases:
+              belongs: ['GRÃO-DE-BICO FRASCO,40', GRÃO DE BICO VIDRO, GRÃO DE BICO]
+              not_belongs: ['CHIPS DE GRÃO BIO, 70G']
+      - slug: pequeno-almoco
+        name: Pequeno-almoço
+        bases: [kg]
+        children:
+          - slug: cereais
+            name: Cereais de pequeno-almoço
+            match: ['\bCEREAIS\b', '\b(CORN FLAKES|SPECIAL FLAKES|MUESLI|CHOCAPIC|GRANOLA)\b']
+            exclude: ['\b(PAO|BARRA|BARRAS|BARRINHAS|BOLACHAS?|TOSTAS|OROW)\b']
+            cases:
+              belongs: [SPECIAL FLAKES ORIGINAL, 'MUESLI CROCANTE BIO, 3', CEREAIS CHOCAPIC 375G]
+              not_belongs: [12 CEREAIS E SEMENTES 550G OROW, BARRAS DE CEREAIS]
+          - slug: bolacha-maria
+            name: Bolacha Maria
+            match: ['\b(BOLACHAS?|BOL) MARIA\b']
+            cases:
+              belongs: [BOLACHA MARIA 800G, BOLACHAS MARIA 3X200G, BOL MARIA PD 800G]
+              not_belongs: [BOLACHA DE AGUA E SAL]
+          - slug: cafe-moido
+            name: Café moído
+            match: ['\bCAFE\b.*\b(MOIDO|MOAGEM|MOAG|MU)\b']
+            exclude: ['\b(CAPSULAS?|CAP|GRAO|SOLUVEL|INSTANTANEO)\b']
+            cases:
+              belongs: [DELTA CAFE BRASIL MOAG. UNI, CAFÉ BRASIL MU 220G, CAFE MOIDO 250G]
+              not_belongs: [CAP. ESPRESSO ALUM, CAFE EM GRAO 1KG]
+      - slug: doces
+        name: Chocolate e doces
+        bases: [kg]
+        children:
+          - slug: chocolate-de-leite-em-tablete
+            name: Chocolate de leite em tablete
+            match: ['\bCHOCOLATE\b.*\bLEITE\b', '\bMILKA\b', '\bTABLETE\b']
+            exclude: ['\b(BEBIDA|GARRAFA|BOLACHAS?|CEREAIS|GELADO|OVOS|BOMBONS|BARRINHAS|PANDORO)\b']
+            cases:
+              belongs: [MILKA CHOCO 135G, CHOCOLATE DE LEITE 100G, TABLETE CHOCOLATE LEITE 200G]
+              not_belongs: [CHOCOLATE PRETO C/ CARAMELO, LEITE COM CHOCOLATE GARRAFA]
+      - slug: conservas
+        name: Conservas
+        bases: [kg]
+        children:
+          - slug: atum-em-lata
+            name: Atum em lata
+            match: ['\bATUM\b']
+            exclude: ['\b(BIFE|BIFES|FRESCO|POSTA|POSTAS|LOMBO|PATE|SALADA|PIZZA|EMPADA)\b']
+            cases:
+              belongs: [ATUM AZEITE X4, ATUM EM OLEO 3X80G, ATUM AO NATURAL 120G]
+              not_belongs: ['BIFE DE ATUM, KG']
+
+  - slug: congelados
+    name: Congelados
+
+  - slug: padaria-e-pastelaria
+    name: Padaria e pastelaria
+    bases: [kg]
+    children:
+      - slug: pao-de-forma
+        name: Pão de forma
+        match: ['(?=.*\bPAO\b)(?=.*\bFORMA\b)']
+        cases:
+          belongs: [BIMBO PAO FORMA S CODEA 10C, PAO DE FORMA 500G, PAO FORMA INTEGRAL 600G]
+          not_belongs: [PÃO PARA CACHORRO 330G]
+
+  - slug: refeicoes-prontas
+    name: Refeições prontas
+    bases: [kg]
+    children:
+      - slug: pizza
+        name: Pizza
+        match: ['\bPIZZAS?\b']
+        exclude: ['\b(MOLHO|MASSA|FARINHA)\b']
+        cases:
+          belongs: ['PIZZA DE TRUFA, 450G', PIZZA ROMANA, Pizza Salami e Grana Padano]
+          not_belongs: [MASSA PARA PIZZA 400G]
+      - slug: humus
+        name: Húmus
+        match: ['\b(HUMUS|HUMMUS)\b']
+        exclude: ['\b(CHIPS|SABOR)\b']
+        cases:
+          belongs: ['HUMUS SORTIDO, 200G', HUMUS NATURAL, HUMMUS CLASSIC]
+          not_belongs: [CHIPS SABOR HUMUS 75G]
+
+  - slug: bebidas
+    name: Bebidas
+    bases: [l]
+    children:
+      - slug: agua-sem-gas
+        name: Água sem gás
+        match: ['\bAGUA\b']
+        exclude: ['\b(COM GAS|C GAS|GASEIFICADA|COCO|TONICA|SABOR|ROSAS|OXIGENADA|SAL|DESTILADA|MICELAR|TOALHITAS?|BOLACHAS?|BEBE)\b']
+        cases:
+          belongs: [ÁGUA SEM GÁS PD 6L, MONCHIQUE AGUA GARR. SPORT, 'AGUA MINERAL NATURAL 1,5L']
+          not_belongs: [AGUA COM GAS, SOCOCO AGUA DE COCO, TOALHITA BEBÉ ÁGUA]
+      - slug: sumo
+        name: Sumo e néctar
+        match: ['\b(SUMO|SUMOS|NECTAR)\b']
+        exclude: ['\b(LIMAO|CONCENTRADO)\b']
+        cases:
+          belongs: [SUMO DE LARANJA 1L, NECTAR DE PESSEGO 1L, SUMO 100% MAÇÃ 1L]
+          not_belongs: [SUMOL LARANJA 33CL]
+      - slug: refrigerante-de-cola
+        name: Refrigerante de cola
+        match: ['\b(COLA|PEPSI)\b']
+        exclude: ['\b(BOLACHAS?|GOMAS|COLA DE)\b']
+        cases:
+          belongs: ['COCA-COLA 1,5L', PEPSI COLA 33CL, COLA ZERO 2L]
+          not_belongs: [GOMAS COLA 100G]
+      - slug: cerveja
+        name: Cerveja com álcool
+        match: ['\b(CERVEJA|SUPER BOCK|SAGRES|HEINEKEN)\b']
+        exclude: ['\b(SEM|S|0 0%) ALCOOL\b', '\b0 0%']
+        cases:
+          belongs: [CERVEJA SUPER BOCK 6X33CL, SAGRES MINI 10X25CL, CERVEJA BRANCA 1L]
+          not_belongs: [CERVEJA SEM ALCOOL 6X33CL]
+
+  - slug: limpeza
+    name: Limpeza
+    children:
+      - slug: detergente-da-roupa-liquido
+        name: Detergente da roupa líquido
+        bases: [dose, l]
+        match: ['(?=.*\bROUPA\b)(?=.*\b(DETERGENTE|LIQUIDO)\b)']
+        exclude: ['\b(LOUCA|MAQUINA DA LOUCA|AMACIADOR|PO|CAPSULAS)\b']
+        cases:
+          belongs: [DETERGENTE ROUPA LIQUIDO 40 DOSES, DET ROUPA LIQ 2L, DETERGENTE LIQUIDO ROUPA 3L]
+          not_belongs: [COMFORT AMACIADOR JASMIM, DETERGENTE LOUCA 1L]
+
+  - slug: higiene-e-cuidado-pessoal
+    name: Higiene e cuidado pessoal
+    children:
+      - slug: papel-higienico
+        name: Papel higiénico
+        bases: [rolo]
+        match: ['\bPAPEL HIGIENICO\b']
+        cases:
+          belongs: [PAPEL HIGIENICO 4 FOLHAS, PAPEL HIGIÉNICO 4 FO, PAPEL HIGIENICO 12 ROLOS]
+          not_belongs: [ROLO COZINH COMPACTO]
+      - slug: desodorizante-em-spray
+        name: Desodorizante em spray
+        bases: [l]
+        match: ['\b(DEO|DESODORIZANTE)\b']
+        exclude: ['\b(ROLL|ROLLON|STICK|BASTAO|CREME)\b']
+        cases:
+          belongs: [DEO SP NIVEA MEN BLACK&WHI 150, DESODORIZANTE SPRAY 200ML, DEO SPRAY REXONA 150ML]
+          not_belongs: [DESODORIZANTE ROLL ON 50ML]
+
+  - slug: bebe
+    name: Bebé
+
+  - slug: animais
+    name: Animais
+
+  - slug: casa-e-outros
+    name: Casa e outros
+    children:
+      # Lines that are not products (deposits, shopping bags): always «não comparável», never «por agrupar».
+      - slug: nao-produto
+        name: Depósitos e sacos de compras
+        comparable: false
+        match: ['\bDEPOSITO\b', '\bSACOS? DE PAPEL\b', '\bSACOS? T SHIRT\b', '\bSACOS? (DE )?COMPRAS?\b', '\bSACOS? REUTILIZAVE(L|IS)\b']
+        cases:
+          belongs: [DEPÓSITO, Deposito 0.60, SACO DE PAPEL O MEU, SACOS T-SHIRT 55MICR, DEPOSITO VOLTA]
+          not_belongs: [SACOS DO LIXO 50L]

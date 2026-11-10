@@ -9,10 +9,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from basketiq.app_config import AppConfig, get_app_config
+from basketiq.catalog import get_catalog
+from basketiq.domain.grouping import Catalog
 
 router = APIRouter(prefix="/v1/config", tags=["config"])
 
 AppConfigDep = Annotated[AppConfig, Depends(get_app_config)]
+CatalogDep = Annotated[Catalog, Depends(get_catalog)]  # config/catalog.yaml (step C)
 
 
 class PublicConfigOut(BaseModel):

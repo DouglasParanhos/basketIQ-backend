@@ -2685,6 +2685,216 @@
         }
       }
     },
+    "/v1/catalog/groups": {
+      "get": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Product classes and their groups",
+        "operationId": "catalog_v1_catalog_groups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/groups/{slug}/comparison": {
+      "get": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "What the user paid for one group in each chain, in the comparison window (D12)",
+        "operationId": "comparison_v1_groups__slug__comparison_get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupComparisonOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/to-complete": {
+      "get": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "«Por completar»: descriptions to group or size",
+        "operationId": "to_complete_v1_to_complete_get",
+        "parameters": [
+          {
+            "name": "tab",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "ungrouped",
+                "missing_size"
+              ],
+              "type": "string",
+              "default": "ungrouped",
+              "title": "Tab"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToCompleteOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/line-rules": {
+      "get": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "«Atribuídos por si»: the user's own rules",
+        "operationId": "line_rules_v1_line_rules_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LineRuleOut"
+                  },
+                  "type": "array",
+                  "title": "Response Line Rules V1 Line Rules Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Group, size or «não comparável» for descriptions; applies to past and future purchases",
+        "operationId": "put_line_rules_v1_line_rules_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineRulesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineRulesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/line-rules/{rule_id}": {
+      "delete": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Remove one rule",
+        "operationId": "delete_line_rule_v1_line_rules__rule_id__delete",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/jobs": {
       "get": {
         "tags": [
@@ -3250,6 +3460,84 @@
         ],
         "title": "CardsOut"
       },
+      "CatalogClassOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogGroupOut"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "groups"
+        ],
+        "title": "CatalogClassOut"
+      },
+      "CatalogGroupOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "bases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Bases"
+          },
+          "comparable": {
+            "type": "boolean",
+            "title": "Comparable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "bases",
+          "comparable"
+        ],
+        "title": "CatalogGroupOut"
+      },
+      "CatalogOut": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogClassOut"
+            },
+            "type": "array",
+            "title": "Classes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "classes"
+        ],
+        "title": "CatalogOut"
+      },
       "CategoryOut": {
         "properties": {
           "id": {
@@ -3267,6 +3555,46 @@
           "name"
         ],
         "title": "CategoryOut"
+      },
+      "ChainPriceOut": {
+        "properties": {
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "merchant_name": {
+            "type": "string",
+            "title": "Merchant Name"
+          },
+          "purchases": {
+            "type": "integer",
+            "title": "Purchases"
+          },
+          "average_cents": {
+            "type": "integer",
+            "title": "Average Cents"
+          },
+          "missing_purchases": {
+            "type": "integer",
+            "title": "Missing Purchases"
+          }
+        },
+        "type": "object",
+        "required": [
+          "merchant",
+          "merchant_name",
+          "purchases",
+          "average_cents",
+          "missing_purchases"
+        ],
+        "title": "ChainPriceOut"
       },
       "ConsumptionItem": {
         "properties": {
@@ -3787,6 +4115,125 @@
         "title": "Goal",
         "description": "What the person wants from the app (onboarding). «All of the above» is the three together."
       },
+      "GroupComparisonOut": {
+        "properties": {
+          "group": {
+            "$ref": "#/components/schemas/GroupRef"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "no_purchases",
+              "single_chain",
+              "not_enough_purchases",
+              "no_clear_difference",
+              "clear_difference"
+            ],
+            "title": "Status"
+          },
+          "basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis"
+          },
+          "window_days": {
+            "type": "integer",
+            "title": "Window Days"
+          },
+          "date_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Date From"
+          },
+          "date_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Date To"
+          },
+          "purchases": {
+            "type": "integer",
+            "title": "Purchases"
+          },
+          "average_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Cents"
+          },
+          "needed": {
+            "type": "integer",
+            "title": "Needed"
+          },
+          "chains": {
+            "items": {
+              "$ref": "#/components/schemas/ChainPriceOut"
+            },
+            "type": "array",
+            "title": "Chains"
+          },
+          "typical_difference_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typical Difference Cents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "status",
+          "basis",
+          "window_days",
+          "date_from",
+          "date_to",
+          "purchases",
+          "average_cents",
+          "needed",
+          "chains",
+          "typical_difference_cents"
+        ],
+        "title": "GroupComparisonOut",
+        "description": "D12: what the user paid for one group in each chain, sorted by name (never by price)."
+      },
+      "GroupRef": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "class_slug": {
+            "type": "string",
+            "title": "Class Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "class_slug"
+        ],
+        "title": "GroupRef"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3852,6 +4299,74 @@
           "FAILED"
         ],
         "title": "JobStatus"
+      },
+      "LineGroupingOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "grouped",
+              "ungrouped",
+              "not_comparable"
+            ],
+            "title": "Status"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GroupRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "group_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "catalog",
+                  "user"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Source"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SizeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceCheckOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "group",
+          "group_source",
+          "size",
+          "price_check"
+        ],
+        "title": "LineGroupingOut",
+        "description": "Step C for one line of a confirmed receipt (spec 010)."
       },
       "LineOut": {
         "properties": {
@@ -3998,6 +4513,16 @@
             },
             "type": "array",
             "title": "Evidence"
+          },
+          "grouping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LineGroupingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -4149,6 +4674,167 @@
         },
         "type": "object",
         "title": "LinePatchIn"
+      },
+      "LineRuleOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "chain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain"
+          },
+          "description_key": {
+            "type": "string",
+            "title": "Description Key"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GroupRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "not_comparable": {
+            "type": "boolean",
+            "title": "Not Comparable"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SizeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applied_lines": {
+            "type": "integer",
+            "title": "Applied Lines"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "chain",
+          "description_key",
+          "description",
+          "group",
+          "not_comparable",
+          "size",
+          "applied_lines",
+          "updated_at"
+        ],
+        "title": "LineRuleOut"
+      },
+      "LineRulesIn": {
+        "properties": {
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/RuleTargetIn"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Targets"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "not_comparable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not Comparable"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleSizeIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "targets"
+        ],
+        "title": "LineRulesIn",
+        "description": "Fields left out keep their value; ``group: null`` or ``size: null`` clears one (to undo, D13)."
+      },
+      "LineRulesOut": {
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/LineRuleOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "applied_lines": {
+            "type": "integer",
+            "title": "Applied Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rules",
+          "applied_lines"
+        ],
+        "title": "LineRulesOut"
       },
       "ListArticle": {
         "properties": {
@@ -4761,6 +5447,24 @@
         ],
         "title": "MonthTotalOut"
       },
+      "NodeRef": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "name"
+        ],
+        "title": "NodeRef"
+      },
       "OriginalUrlOut": {
         "properties": {
           "url": {
@@ -5053,6 +5757,87 @@
         ],
         "title": "PreviousPeriodOut"
       },
+      "PriceCheckOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "above",
+              "below",
+              "normal",
+              "no_average",
+              "missing_size"
+            ],
+            "title": "Status"
+          },
+          "basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis"
+          },
+          "purchases": {
+            "type": "integer",
+            "title": "Purchases"
+          },
+          "needed": {
+            "type": "integer",
+            "title": "Needed"
+          },
+          "window_days": {
+            "type": "integer",
+            "title": "Window Days"
+          },
+          "price_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Cents"
+          },
+          "average_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Cents"
+          },
+          "effect_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Cents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "basis",
+          "purchases",
+          "needed",
+          "window_days"
+        ],
+        "title": "PriceCheckOut",
+        "description": "D11: this line's price against what the user usually pays for the group (earlier, in the window)."
+      },
       "PricePoint": {
         "properties": {
           "receipt_id": {
@@ -5264,6 +6049,16 @@
           "insufficient_data": {
             "type": "boolean",
             "title": "Insufficient Data"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GroupRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -5301,6 +6096,26 @@
             "type": "integer",
             "title": "Comparison Window Days"
           },
+          "comparison_min_purchases": {
+            "type": "integer",
+            "title": "Comparison Min Purchases"
+          },
+          "comparison_difference_pct": {
+            "type": "integer",
+            "title": "Comparison Difference Pct"
+          },
+          "comparison_min_effect_cents": {
+            "type": "integer",
+            "title": "Comparison Min Effect Cents"
+          },
+          "comparison_min_chains": {
+            "type": "integer",
+            "title": "Comparison Min Chains"
+          },
+          "to_complete_page_size": {
+            "type": "integer",
+            "title": "To Complete Page Size"
+          },
           "goal_ring_green_up_to_pct": {
             "type": "integer",
             "title": "Goal Ring Green Up To Pct"
@@ -5324,6 +6139,11 @@
           "llm_enabled",
           "smart_list_enabled",
           "comparison_window_days",
+          "comparison_min_purchases",
+          "comparison_difference_pct",
+          "comparison_min_effect_cents",
+          "comparison_min_chains",
+          "to_complete_page_size",
           "goal_ring_green_up_to_pct",
           "goal_ring_orange_up_to_pct",
           "average_min_months",
@@ -5882,6 +6702,11 @@
               }
             ]
           },
+          "ungrouped_descriptions": {
+            "type": "integer",
+            "title": "Ungrouped Descriptions",
+            "default": 0
+          },
           "version": {
             "type": "integer",
             "title": "Version"
@@ -6272,6 +7097,61 @@
         ],
         "title": "ReviewReasonOut"
       },
+      "RuleSizeIn": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 8,
+            "minLength": 1,
+            "title": "Unit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value",
+          "unit"
+        ],
+        "title": "RuleSizeIn"
+      },
+      "RuleTargetIn": {
+        "properties": {
+          "chain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Merchant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "description"
+        ],
+        "title": "RuleTargetIn"
+      },
       "SeriesOut": {
         "properties": {
           "granularity": {
@@ -6628,6 +7508,41 @@
         ],
         "title": "ShoppingMerchantIn"
       },
+      "SizeOut": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "description",
+                  "user",
+                  "receipt"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "unit",
+          "source"
+        ],
+        "title": "SizeOut"
+      },
       "StoredFilesDeleted": {
         "properties": {
           "files_deleted": {
@@ -6783,6 +7698,146 @@
           "empty"
         ],
         "title": "SummaryOut"
+      },
+      "ToCompleteItemOut": {
+        "properties": {
+          "chain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain"
+          },
+          "merchant_name": {
+            "type": "string",
+            "title": "Merchant Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "description_key": {
+            "type": "string",
+            "title": "Description Key"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "lines": {
+            "type": "integer",
+            "title": "Lines"
+          },
+          "purchases": {
+            "type": "integer",
+            "title": "Purchases"
+          },
+          "spent_cents": {
+            "type": "integer",
+            "title": "Spent Cents"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GroupRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/GroupRef"
+            },
+            "type": "array",
+            "title": "Suggestions"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chain",
+          "merchant_name",
+          "description",
+          "description_key",
+          "unit",
+          "lines",
+          "purchases",
+          "spent_cents",
+          "group",
+          "hint",
+          "suggestions",
+          "rule_id"
+        ],
+        "title": "ToCompleteItemOut"
+      },
+      "ToCompleteOut": {
+        "properties": {
+          "tab": {
+            "type": "string",
+            "enum": [
+              "ungrouped",
+              "missing_size"
+            ],
+            "title": "Tab"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ToCompleteItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tab",
+          "total",
+          "page_size",
+          "items"
+        ],
+        "title": "ToCompleteOut"
       },
       "Totals": {
         "properties": {

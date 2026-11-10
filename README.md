@@ -238,6 +238,11 @@ Product decisions and feature flags live in one file, the only source of these v
 | `LLM_ENABLED` | `false` | Local LLM agent (Agno + Ollama) for receipt lines the parser could not read. |
 | `SMART_LIST_ENABLED` | `false` | Shows the smart shopping list («Lista») in the app. Off until the list is built and approved; the client reads it from `GET /v1/config`. |
 | `COMPARISON_WINDOW_DAYS` | `90` | Days of confirmed purchases (today included) behind the smart list's prices, `GET /v1/lists/articles`; also the step C comparison window (D11). 7–366. |
+| `COMPARISON_MIN_PURCHASES` | `3` | Step C (spec 010): earlier purchases of a group, with a known size, in the window before a line is compared with the user's average (D11); also the purchases each chain needs to be compared (D12). 1–20. |
+| `COMPARISON_DIFFERENCE_PCT` | `15` | Smallest difference, in percent of the user's group average, reported as «above/below what you usually pay» or as a difference between chains. 1–100. |
+| `COMPARISON_MIN_EFFECT_CENTS` | `20` | Smallest effect in cents on the line (D11) or on a typical purchase (D12) for the difference to be reported; below it, «normal» or «sem diferença clara». 0–10000. |
+| `COMPARISON_MIN_CHAINS` | `2` | Chains with enough purchases before a group is compared between chains (D12). 2–7. |
+| `TO_COMPLETE_PAGE_SIZE` | `10` | Descriptions shown at a time in each tab of «Por completar» (D13), most spending first. 1–100. |
 | `GOAL_RING_GREEN_UP_TO_PCT` | `50` | Home goal ring: green up to this whole percentage of the goal, inclusive. `1 ≤ green < orange`. |
 | `GOAL_RING_ORANGE_UP_TO_PCT` | `75` | Orange above green up to this percentage, inclusive; red above. At most `100`. |
 | `AVERAGE_MIN_MONTHS` | `2` | Fewest complete months with confirmed receipts before the Home shows a monthly average (1–12). |

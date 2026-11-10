@@ -59,6 +59,11 @@ class ProductConfigOut(BaseModel):
     llm_enabled: bool
     smart_list_enabled: bool
     comparison_window_days: int
+    comparison_min_purchases: int
+    comparison_difference_pct: int
+    comparison_min_effect_cents: int
+    comparison_min_chains: int
+    to_complete_page_size: int
     goal_ring_green_up_to_pct: int
     goal_ring_orange_up_to_pct: int
     average_min_months: int
