@@ -1,6 +1,10 @@
-"""Product categories of the shopping list: the groups the list is drawn in, decided by keyword rules.
+"""Product categories of the shopping list: the groups the list is drawn in.
 
-Provisional until the Passo C1 (classes by rules, B-29) replaces it; a person can always correct a category.
+A product the step C catalogue knows takes the category its catalogue node declares (`list_category` in
+config/catalog.yaml), normally that of its class (decided by Douglas on 2026-11-10: the
+15 classes of the catalogue are the one taxonomy, and these categories follow them until the list shows the
+classes themselves). Names the catalogue does not know fall back on keyword rules. A person can always correct
+a category.
 """
 
 from __future__ import annotations

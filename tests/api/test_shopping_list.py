@@ -451,3 +451,42 @@ def test_the_suggestions_are_what_is_bought_often_and_is_not_already_on_the_list
     assert first[0]["category_name"] == "Laticínios e ovos"
     add(client, "Iogurte natural")
     assert [s["name"] for s in client.get(f"{CURRENT}/suggestions").json()] == ["Bananas", "Sabão"]
+
+
+@pytest.mark.req("F-306")
+def test_the_estimate_converts_the_items_unit_to_the_unit_of_the_price(
+    client: TestClient, user: User, product: Callable[[str], Product], buy: Callable[..., None]
+) -> None:
+    buy(user, product("Bananas"), TODAY - timedelta(days=5), 150, qty="1.000", unit="kg")  # 1,50 €/kg
+    buy(user, product("Queijo"), TODAY - timedelta(days=5), 500, qty="0.500", unit="kg")  # 10,00 €/kg
+    add(client, "Bananas", quantity="500", unit="g")  # 0,5 kg
+    add(client, "Queijo", quantity="2", unit="un")  # two of what? Not comparable with a price per kg
+    body = the_list(client)
+    assert estimate(body, "LIDL")["total_cents"] == 75
+    assert estimate(body, "LIDL")["items_with_price"] == 1
+    # The item keeps its price per kg on the list, even when it cannot enter the estimate.
+    assert item_named(body, "Queijo")["expected"]["price_cents"] == 1000
+
+
+@pytest.mark.req("F-311")
+def test_the_category_follows_the_product_group_of_step_c(
+    client: TestClient, user: User, product: Callable[[str], Product], buy: Callable[..., None]
+) -> None:
+
+    def category_of(name: str, **fields: Any) -> str:
+        return str(item_named(add(client, name, **fields), name)["category"])
+
+    # The catalogue knows these; the keywords alone would get them wrong.
+    assert category_of("Peito de peru fatiado") == "charcutaria"
+    assert category_of("Salada iceberg") == "frutas_legumes"
+    assert category_of("Molho de tomate") == "mercearia"  # a sauce, not a vegetable
+    assert category_of("Bolachas água e sal") == "mercearia"  # biscuits, not a drink
+    # A product the person grouped herself takes the category of that group, in the suggestions too.
+    buy(user, product("Artigo da padaria"), TODAY - timedelta(days=5), 129)
+    rule = {"targets": [{"chain": "LIDL", "description": "ARTIGO"}], "group": "pao-de-forma"}
+    assert client.put("/v1/line-rules", json=rule).status_code == 200
+    suggested = client.get(f"{CURRENT}/suggestions").json()
+    assert [(s["name"], s["category"]) for s in suggested] == [("Artigo da padaria", "padaria")]
+    assert category_of("Artigo da padaria") == "padaria"
+    # A category chosen by the person always wins.
+    assert category_of("Salada de fruta", category="mercearia") == "mercearia"

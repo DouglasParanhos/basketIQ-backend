@@ -188,6 +188,41 @@ class ProductRef(BaseModel):
     name: str
 
 
+class GroupRef(BaseModel):
+    slug: str
+    name: str
+    class_slug: str
+
+
+class SizeOut(BaseModel):
+    value: Decimal
+    unit: str  # kg, l, un or a unit of use (rolo, dose)
+    source: Literal["description", "user", "receipt"] | None  # receipt: the weight of a weighed line
+
+
+class PriceCheckOut(BaseModel):
+    """D11: this line's price against what the user usually pays for the group (earlier, in the window)."""
+
+    status: Literal["above", "below", "normal", "no_average", "missing_size"]
+    basis: str | None  # kg, l, un or a unit of use
+    purchases: int  # earlier purchases of the group in the window
+    needed: int
+    window_days: int
+    price_cents: int | None = None  # per basis unit, net of discounts
+    average_cents: int | None = None
+    effect_cents: int | None = None  # (price − average) × quantity on this line
+
+
+class LineGroupingOut(BaseModel):
+    """Step C for one line of a confirmed receipt (spec 010)."""
+
+    status: Literal["grouped", "ungrouped", "not_comparable"]
+    group: GroupRef | None
+    group_source: Literal["catalog", "user"] | None
+    size: SizeOut | None
+    price_check: PriceCheckOut | None
+
+
 class LineOut(BaseModel):
     id: uuid.UUID
     line_number: int
@@ -208,6 +243,7 @@ class LineOut(BaseModel):
     manually_edited: bool
     edited_fields: list[str]
     evidence: list[str]
+    grouping: LineGroupingOut | None = None  # only on a confirmed receipt
 
 
 class ReviewReasonOut(BaseModel):
@@ -276,6 +312,8 @@ class ReceiptOut(BaseModel):
     original_expires_at: datetime | None
     original_deleted_at: datetime | None
     processing: ProcessingInfo | None
+    # Descriptions of this confirmed receipt left «por agrupar» (step C, D13); 0 before confirmation.
+    ungrouped_descriptions: int = 0
     version: int
     created_at: datetime
     updated_at: datetime
@@ -721,3 +759,122 @@ class ProductAnalyticsOut(BaseModel):
     history: list[PricePoint]
     by_merchant: list[MerchantPrice]
     insufficient_data: bool
+    group: GroupRef | None = (
+        None  # step C: the group of the latest purchase, for its comparison between chains
+    )
+
+
+# ------------------------------------------------------------ step C (spec 010): groups and «Por completar»
+
+
+class CatalogGroupOut(BaseModel):
+    slug: str
+    name: str
+    bases: list[str]
+    comparable: bool
+
+
+class CatalogClassOut(BaseModel):
+    slug: str
+    name: str
+    groups: list[CatalogGroupOut]
+
+
+class CatalogOut(BaseModel):
+    version: int
+    classes: list[CatalogClassOut]
+
+
+class ChainPriceOut(BaseModel):
+    merchant: str | None
+    merchant_name: str
+    purchases: int
+    average_cents: int  # what the user paid on average per basis unit, net of discounts
+    missing_purchases: int
+
+
+class GroupComparisonOut(BaseModel):
+    """D12: what the user paid for one group in each chain, sorted by name (never by price)."""
+
+    group: GroupRef
+    status: Literal[
+        "no_purchases", "single_chain", "not_enough_purchases", "no_clear_difference", "clear_difference"
+    ]
+    basis: str | None
+    window_days: int
+    date_from: Date
+    date_to: Date
+    purchases: int
+    average_cents: int | None
+    needed: int
+    chains: list[ChainPriceOut]
+    typical_difference_cents: int | None  # only with a clear difference: on a typical purchase
+
+
+class NodeRef(BaseModel):
+    slug: str
+    name: str
+
+
+class ToCompleteItemOut(BaseModel):
+    chain: str | None
+    merchant_name: str
+    description: str  # the latest confirmed spelling
+    description_key: str
+    unit: str | None
+    lines: int
+    purchases: int
+    spent_cents: int
+    group: GroupRef | None  # only in the missing_size tab
+    hint: NodeRef | None
+    suggestions: list[GroupRef]
+    rule_id: uuid.UUID | None
+
+
+class ToCompleteOut(BaseModel):
+    tab: Literal["ungrouped", "missing_size"]
+    total: int
+    page_size: int
+    items: list[ToCompleteItemOut]
+
+
+class RuleSizeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: Decimal = Field(gt=0, max_digits=12, decimal_places=3)
+    unit: str = Field(min_length=1, max_length=8)  # a base of the catalogue (checked against it)
+
+
+class RuleTargetIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chain: Merchant | None = None
+    description: str = Field(min_length=1, max_length=255)
+
+
+class LineRulesIn(BaseModel):
+    """Fields left out keep their value; ``group: null`` or ``size: null`` clears one (to undo, D13)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    targets: list[RuleTargetIn] = Field(min_length=1, max_length=50)
+    group: str | None = None
+    not_comparable: bool | None = None
+    size: RuleSizeIn | None = None
+
+
+class LineRuleOut(BaseModel):
+    id: uuid.UUID
+    chain: str | None
+    description_key: str
+    description: str | None
+    group: GroupRef | None
+    not_comparable: bool
+    size: SizeOut | None
+    applied_lines: int
+    updated_at: datetime | None
+
+
+class LineRulesOut(BaseModel):
+    rules: list[LineRuleOut]
+    applied_lines: int

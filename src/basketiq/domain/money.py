@@ -57,9 +57,14 @@ def one_digit_apart(a: int, b: int) -> bool:
     return len(x) == len(y) and sum(p != q for p, q in zip(x, y, strict=True)) == 1
 
 
+def round_cents(value: Decimal) -> int:
+    """An exact amount of cents rounded half-up to a whole cent (only when showing it, constitution II)."""
+    return int(value.quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
 def multiply_cents(quantity: Decimal, unit_price_cents: int) -> int:
     """quantity × unit price, rounded half-up to the cent (as printed on receipts)."""
-    return int((quantity * Decimal(unit_price_cents)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    return round_cents(quantity * Decimal(unit_price_cents))
 
 
 def to_base_unit(quantity: Decimal, unit: str | None) -> tuple[Decimal, str]:

@@ -24,6 +24,20 @@ SMART_LIST_ENABLED: false
 # from the last N days count, today included. Whole number, 7 to 366.
 COMPARISON_WINDOW_DAYS: 90
 
+# Step C comparison (spec 010; RASCUNHO D11 and D12, approved on 2026-11-08). Only purchases of the same product group
+# with a known size count. A line is «above/below what you usually pay» when the user has at least
+# COMPARISON_MIN_PURCHASES earlier purchases of the group in the window, the price differs from their average by at
+# least COMPARISON_DIFFERENCE_PCT percent and the effect on the line is at least COMPARISON_MIN_EFFECT_CENTS cents;
+# otherwise «normal». Chains are compared per group only with COMPARISON_MIN_CHAINS chains of COMPARISON_MIN_PURCHASES
+# purchases each, with the same two thresholds on a typical purchase. Whole numbers.
+COMPARISON_MIN_PURCHASES: 3
+COMPARISON_DIFFERENCE_PCT: 15
+COMPARISON_MIN_EFFECT_CENTS: 20
+COMPARISON_MIN_CHAINS: 2
+
+# «Por completar» (D13): how many descriptions each tab shows at a time, the ones with the most spending first.
+TO_COMPLETE_PAGE_SIZE: 10
+
 # Home goal ring (RF-15). The band is decided on the goal percentage rounded to a whole number (half up),
 # the same number the screen shows: green up to GOAL_RING_GREEN_UP_TO_PCT inclusive, orange above it up to
 # GOAL_RING_ORANGE_UP_TO_PCT inclusive, red above. Whole numbers, 1 <= green < orange <= 100.

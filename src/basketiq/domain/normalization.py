@@ -6,11 +6,15 @@ import re
 import unicodedata
 
 
+def fold(raw: str) -> str:
+    """Accents removed and upper case; punctuation kept ("Pão 1,5 kg" → "PAO 1,5 KG")."""
+    text = unicodedata.normalize("NFKD", raw)
+    return "".join(c for c in text if not unicodedata.combining(c)).upper()
+
+
 def normalize_key(raw: str) -> str:
     """Matching key: accents removed, upper case, punctuation collapsed ("Pão  croc." == "PAO CROC")."""
-    text = unicodedata.normalize("NFKD", raw)
-    text = "".join(c for c in text if not unicodedata.combining(c)).upper()
-    text = re.sub(r"[^A-Z0-9%]+", " ", text)
+    text = re.sub(r"[^A-Z0-9%]+", " ", fold(raw))
     return re.sub(r"\s+", " ", text).strip()[:255]
 
 

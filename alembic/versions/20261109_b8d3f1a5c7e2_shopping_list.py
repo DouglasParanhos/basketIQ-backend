@@ -19,7 +19,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # The shopping list (RF-16): one per user, deleted with the user. Items are the user's own data, never shared.
+    # The shopping list (RF-16): one per user, deleted with the user. Items are the user's own data,
+    # never shared.
     op.create_table(
         "shopping_lists",
         sa.Column("id", sa.UUID(), nullable=False),

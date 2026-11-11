@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
 from typing import Annotated, Any
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from basketiq.api.deps import ConsentedUser, Db, SettingsDep, csrf_protect
 from basketiq.api.errors import ApiError, ErrorBody, FieldError
 from basketiq.api.ratelimit import limiter
+from basketiq.api.routers.config import AppConfigDep, CatalogDep
 from basketiq.api.schemas import (
     DuplicateDecisionIn,
     ErrorInfo,
@@ -40,8 +42,10 @@ from basketiq.api.schemas import (
     VersionIn,
     WarningOut,
 )
+from basketiq.app_config import AppConfig
 from basketiq.config import Settings, get_settings
 from basketiq.db.models import Receipt, ReceiptLine
+from basketiq.domain.grouping import Catalog
 from basketiq.domain.status import (
     EDITABLE_STATUSES,
     ERROR_ACTIONS,
@@ -52,6 +56,7 @@ from basketiq.domain.status import (
 from basketiq.pipeline.quality import WARNING_MESSAGES
 from basketiq.pipeline.validation import ALLOWED_MIMES
 from basketiq.queue import JobQueue, get_queue
+from basketiq.services import groups
 from basketiq.services import receipts as svc
 from basketiq.storage import ObjectStorage, get_storage
 
@@ -64,6 +69,22 @@ router = APIRouter(
 
 Storage = Annotated[ObjectStorage, Depends(get_storage)]
 Queue = Annotated[JobQueue, Depends(get_queue)]
+
+
+@dataclass(frozen=True)
+class ReceiptContext:
+    """What a receipt response needs: the settings, and for step C the product config and the catalogue."""
+
+    settings: Settings
+    config: AppConfig
+    catalog: Catalog
+
+
+def receipt_context(settings: SettingsDep, config: AppConfigDep, catalog: CatalogDep) -> ReceiptContext:
+    return ReceiptContext(settings, config, catalog)
+
+
+ReceiptView = Annotated[ReceiptContext, Depends(receipt_context)]
 
 
 def translate_errors[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
@@ -279,28 +300,28 @@ def delete_stored_files(db: Db, storage: Storage, user: ConsentedUser) -> Stored
 
 @router.get("/{receipt_id}", response_model=ReceiptOut)
 @translate_errors
-def get_receipt(receipt_id: uuid.UUID, db: Db, settings: SettingsDep, user: ConsentedUser) -> ReceiptOut:
-    return serialize(db, settings, svc.get_owned(db, user, receipt_id))
+def get_receipt(receipt_id: uuid.UUID, db: Db, view: ReceiptView, user: ConsentedUser) -> ReceiptOut:
+    return serialize(db, view, svc.get_owned(db, user, receipt_id))
 
 
 @router.patch("/{receipt_id}", response_model=ReceiptOut, responses={409: {"model": ErrorBody}})
 @translate_errors
 def patch_receipt(
-    receipt_id: uuid.UUID, body: ReceiptPatchIn, db: Db, settings: SettingsDep, user: ConsentedUser
+    receipt_id: uuid.UUID, body: ReceiptPatchIn, db: Db, view: ReceiptView, user: ConsentedUser
 ) -> ReceiptOut:
     patch: dict[str, Any] = body.model_dump(exclude_unset=True)
     if body.lines is not None:
         patch["lines"] = [line.model_dump(exclude_unset=True) for line in body.lines]
-    receipt = svc.edit_receipt(db, settings, user, receipt_id, patch)
-    return serialize(db, settings, receipt)
+    receipt = svc.edit_receipt(db, view.settings, user, receipt_id, patch)
+    return serialize(db, view, receipt)
 
 
 @router.post("/{receipt_id}/confirm", response_model=ReceiptOut, responses={409: {"model": ErrorBody}})
 @translate_errors
 def confirm(
-    receipt_id: uuid.UUID, body: VersionIn, db: Db, settings: SettingsDep, user: ConsentedUser
+    receipt_id: uuid.UUID, body: VersionIn, db: Db, view: ReceiptView, user: ConsentedUser
 ) -> ReceiptOut:
-    return serialize(db, settings, svc.confirm(db, settings, user, receipt_id, body.version))
+    return serialize(db, view, svc.confirm(db, view.settings, user, receipt_id, body.version))
 
 
 @router.post(
@@ -311,9 +332,9 @@ def confirm(
 )
 @translate_errors
 def reopen(
-    receipt_id: uuid.UUID, body: VersionIn, db: Db, settings: SettingsDep, user: ConsentedUser
+    receipt_id: uuid.UUID, body: VersionIn, db: Db, view: ReceiptView, user: ConsentedUser
 ) -> ReceiptOut:
-    return serialize(db, settings, svc.reopen(db, settings, user, receipt_id, body.version))
+    return serialize(db, view, svc.reopen(db, view.settings, user, receipt_id, body.version))
 
 
 @router.post("/{receipt_id}/duplicate-decision", response_model=ReceiptOut | None)
@@ -322,12 +343,12 @@ def duplicate_decision(
     receipt_id: uuid.UUID,
     body: DuplicateDecisionIn,
     db: Db,
-    settings: SettingsDep,
+    view: ReceiptView,
     storage: Storage,
     user: ConsentedUser,
 ) -> ReceiptOut | None:
-    receipt = svc.duplicate_decision(db, settings, storage, user, receipt_id, keep=body.action == "keep")
-    return serialize(db, settings, receipt) if receipt else None
+    receipt = svc.duplicate_decision(db, view.settings, storage, user, receipt_id, keep=body.action == "keep")
+    return serialize(db, view, receipt) if receipt else None
 
 
 @router.post(
@@ -340,17 +361,17 @@ def choose_merchant(
     receipt_id: uuid.UUID,
     body: MerchantChoiceIn,
     db: Db,
-    settings: SettingsDep,
+    view: ReceiptView,
     storage: Storage,
     queue: Queue,
     user: ConsentedUser,
 ) -> ReceiptOut | JobOut:
     if body.merchant == "UNSUPPORTED":
-        return serialize(db, settings, svc.mark_unsupported(db, user, receipt_id))
+        return serialize(db, view, svc.mark_unsupported(db, user, receipt_id))
     receipt = svc.get_owned(db, user, receipt_id, for_update=True)
     receipt.merchant_hint = body.merchant
     job, created = svc.request_processing(
-        db, settings, storage, queue, user, receipt_id, f"merchant-{uuid.uuid4()}"
+        db, view.settings, storage, queue, user, receipt_id, f"merchant-{uuid.uuid4()}"
     )
     db.commit()
     if created:
@@ -394,15 +415,15 @@ def delete_receipt(receipt_id: uuid.UUID, db: Db, storage: Storage, user: Consen
 @router.delete("/{receipt_id}/original", response_model=ReceiptOut)
 @translate_errors
 def delete_original(
-    receipt_id: uuid.UUID, db: Db, settings: SettingsDep, storage: Storage, user: ConsentedUser
+    receipt_id: uuid.UUID, db: Db, view: ReceiptView, storage: Storage, user: ConsentedUser
 ) -> ReceiptOut:
-    return serialize(db, settings, svc.delete_original(db, storage, user, receipt_id))
+    return serialize(db, view, svc.delete_original(db, storage, user, receipt_id))
 
 
 # ---------------------------------------------------------------- serialisation
 
 
-def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
+def serialize(db: Session, view: ReceiptContext, receipt: Receipt) -> ReceiptOut:
     status = ReceiptStatus(receipt.processing_status)
     has_content = status not in ERROR_STATUSES and status not in (
         ReceiptStatus.RECEIVED,
@@ -410,7 +431,7 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
         ReceiptStatus.EXTRACTING,
     )
     job = svc.latest_job(db, receipt.id)
-    evaluation = svc.evaluate_receipt(db, settings, receipt, job) if has_content else None
+    evaluation = svc.evaluate_receipt(db, view.settings, receipt, job) if has_content else None
     rec = evaluation.reconciliation if evaluation else None
 
     error = None
@@ -420,6 +441,8 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
             code=receipt.error_code, message=reason.get("message"), action=ERROR_ACTIONS.get(status)
         )
 
+    # Step C (spec 010): groups and «above/below what you usually pay», only once the receipt is confirmed.
+    grouping, ungrouped = groups.receipt_lines_check(db, receipt, view.catalog, view.config)
     lines = []
     for i, line in enumerate(receipt.lines):
         flags = evaluation.line_flags.get(i, []) if evaluation else []
@@ -449,6 +472,7 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
                 manually_edited=line.manually_edited,
                 edited_fields=list(line.edited_fields or []),
                 evidence=list(evidence.get("lines", [])),
+                grouping=grouping.get(line.id),
             )
         )
 
@@ -497,6 +521,7 @@ def serialize(db: Session, settings: Settings, receipt: Receipt) -> ReceiptOut:
         )
         if job
         else None,
+        ungrouped_descriptions=ungrouped,
         version=receipt.version,
         created_at=receipt.created_at,
         updated_at=receipt.updated_at,
