@@ -116,7 +116,7 @@ jobs:
       - name: System libraries for OpenCV/Paddle
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1
       - run: uv sync --all-extras
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.paddlex
           key: paddlex-${{ runner.os }}-${{ hashFiles('uv.lock') }}-doc-ori  # + the page-orientation model
