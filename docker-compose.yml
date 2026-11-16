@@ -3,6 +3,7 @@ name: basketiq
 
 x-backend-env: &backend-env
   BASKETIQ_ENV: local
+  BASKETIQ_METRICS_HOST: 0.0.0.0  # reachable inside the compose network only: 9100 is not published
   BASKETIQ_DATABASE_URL: postgresql+psycopg://basketiq:basketiq@postgres:5432/basketiq
   BASKETIQ_REDIS_URL: redis://redis:6379/0
   BASKETIQ_S3_ENDPOINT_URL: http://storage:8333

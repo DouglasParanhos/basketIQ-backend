@@ -26,7 +26,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
     if settings.metrics_port and settings.env != "test":  # create_app runs many times in the tests
-        metrics.serve(settings.metrics_port)
+        metrics.serve(settings.metrics_port, settings.metrics_host)
     get_app_config()  # fail fast if config/app-config.yaml is missing or invalid
     get_catalog()  # and config/catalog.yaml (step C)
     app = FastAPI(

@@ -44,10 +44,14 @@ HTTP_LATENCY = Histogram(
 _server: tuple[HTTPServer, Thread] | None = None
 
 
-def serve(port: int) -> tuple[HTTPServer, Thread]:
-    """Expose the metrics on `port`, apart from the API (so they are not reachable through its public port).
-    Once only: later calls return the server already running."""
+def serve(port: int, host: str = "127.0.0.1") -> tuple[HTTPServer, Thread] | None:
+    """Expose the metrics on `host:port`, apart from the API (so they are not reachable through its public
+    port). Once only: later calls return the server already running. A port that cannot be bound (a second
+    process, something else on it) costs the metrics, not the API: returns None."""
     global _server
     if _server is None:
-        _server = start_http_server(port)
+        try:
+            _server = start_http_server(port, addr=host)
+        except OSError:
+            return None
     return _server

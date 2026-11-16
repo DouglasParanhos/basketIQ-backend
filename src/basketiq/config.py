@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     env: Literal["local", "test", "staging", "production"] = "local"
     log_level: str = "INFO"
     metrics_port: int = 9100  # Prometheus, on its own port, not published by compose; 0 turns it off
+    metrics_host: str = "127.0.0.1"  # the compose file sets 0.0.0.0: the container's network is internal
     timezone: str = "Europe/Lisbon"
 
     database_url: str = "postgresql+psycopg://basketiq:basketiq@localhost:5432/basketiq"
