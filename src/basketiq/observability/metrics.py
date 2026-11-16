@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from prometheus_client import Counter, Histogram
+from http.server import HTTPServer
+from threading import Thread
+
+from prometheus_client import Counter, Histogram, start_http_server
 
 STAGE_SECONDS = Histogram(
     "basketiq_pipeline_stage_seconds",
@@ -37,3 +40,14 @@ HTTP_LATENCY = Histogram(
     ["method", "route", "status"],
     buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5),
 )
+
+_server: tuple[HTTPServer, Thread] | None = None
+
+
+def serve(port: int) -> tuple[HTTPServer, Thread]:
+    """Expose the metrics on `port`, apart from the API (so they are not reachable through its public port).
+    Once only: later calls return the server already running."""
+    global _server
+    if _server is None:
+        _server = start_http_server(port)
+    return _server

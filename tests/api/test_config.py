@@ -149,3 +149,8 @@ def test_api_refuses_to_start_with_an_invalid_file(
     finally:
         monkeypatch.delenv("BASKETIQ_APP_CONFIG_FILE")
         get_app_config.cache_clear()
+
+
+@pytest.mark.req("SEC-metrics")
+def test_api_does_not_serve_metrics(client: TestClient) -> None:
+    assert client.get("/metrics").status_code == 404

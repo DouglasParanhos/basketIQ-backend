@@ -5,7 +5,6 @@ import uuid
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
@@ -26,6 +25,8 @@ log = get_logger("basketiq.api")
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
+    if settings.metrics_port and settings.env != "test":  # create_app runs many times in the tests
+        metrics.serve(settings.metrics_port)
     get_app_config()  # fail fast if config/app-config.yaml is missing or invalid
     get_catalog()  # and config/catalog.yaml (step C)
     app = FastAPI(
@@ -80,10 +81,6 @@ def create_app() -> FastAPI:
         with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"status": "ready"}
-
-    @app.get("/metrics", include_in_schema=False)
-    def prometheus() -> Response:
-        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     return app
 

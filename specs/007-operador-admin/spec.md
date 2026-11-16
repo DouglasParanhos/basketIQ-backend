@@ -53,7 +53,7 @@ falharam — sem acesso ao conteúdo das notas.
 ### Edge Cases
 
 - Reprocessar uma compra confirmada → 409 (`invalid_state`).
-- Métricas de utilização do dashboard e filtros são expostas em `/metrics` (Prometheus), não na API.
+- Métricas de utilização do dashboard e filtros são expostas em Prometheus, numa porta interna (`metrics_port`, 9100, não publicada), não na API.
 
 ## Requirements *(mandatory)*
 
