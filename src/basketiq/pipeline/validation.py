@@ -13,9 +13,10 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
 from basketiq.domain.status import ReceiptStatus, SourceType
+from basketiq.pipeline.limits import MAX_PIXELS, fits
 
 register_heif_opener()
-Image.MAX_IMAGE_PIXELS = 60_000_000  # ~ 8000x7500; larger is not a phone photo
+Image.MAX_IMAGE_PIXELS = MAX_PIXELS  # second barrier: Pillow itself refuses at twice this
 
 PDF_MIME = "application/pdf"
 IMAGE_MIMES = frozenset({"image/jpeg", "image/png", "image/heic", "image/heif"})
@@ -112,6 +113,10 @@ def _validate_pdf(data: bytes, max_pages: int) -> int:
 def _validate_image(data: bytes) -> None:
     try:
         with Image.open(io.BytesIO(data)) as img:
+            if not fits(*img.size):  # the header says the size: no need to decode a bomb
+                raise DocumentRejectedError(
+                    ReceiptStatus.INVALID_FORMAT, "image_too_large", "A imagem é demasiado grande."
+                )
             img.load()
             width, height = img.size
     except Image.DecompressionBombError as exc:

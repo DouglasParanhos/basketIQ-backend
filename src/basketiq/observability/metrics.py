@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from prometheus_client import Counter, Histogram
+from http.server import HTTPServer
+from threading import Thread
+
+from prometheus_client import Counter, Histogram, start_http_server
 
 STAGE_SECONDS = Histogram(
     "basketiq_pipeline_stage_seconds",
@@ -37,3 +40,18 @@ HTTP_LATENCY = Histogram(
     ["method", "route", "status"],
     buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5),
 )
+
+_server: tuple[HTTPServer, Thread] | None = None
+
+
+def serve(port: int, host: str = "127.0.0.1") -> tuple[HTTPServer, Thread] | None:
+    """Expose the metrics on `host:port`, apart from the API (so they are not reachable through its public
+    port). Once only: later calls return the server already running. A port that cannot be bound (a second
+    process, something else on it) costs the metrics, not the API: returns None."""
+    global _server
+    if _server is None:
+        try:
+            _server = start_http_server(port, addr=host)
+        except OSError:
+            return None
+    return _server

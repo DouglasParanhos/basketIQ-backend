@@ -71,3 +71,24 @@ def test_heic_is_accepted() -> None:
     buf = io.BytesIO()
     Image.new("RGB", (400, 600), "white").save(buf, format="HEIF")
     assert validate_document(buf.getvalue(), "image/heic", MAX, 5).mime == "image/heic"
+
+
+@pytest.mark.req("SEC-limits")
+def test_image_over_the_pixel_budget_is_rejected_before_decoding(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+
+    from PIL import Image, ImageFile
+
+    buf = io.BytesIO()
+    Image.new("1", (10_000, 10_000)).save(buf, format="PNG")  # 100 M pixels, a few KB
+    decoded: list[bool] = []
+    original = ImageFile.ImageFile.load
+    monkeypatch.setattr(ImageFile.ImageFile, "load", lambda self: decoded.append(True) or original(self))
+    err = rejected(buf.getvalue(), "image/png")
+    assert (err.status, err.code) == (ReceiptStatus.INVALID_FORMAT, "image_too_large")
+    assert not decoded
+
+
+@pytest.mark.req("SEC-limits")
+def test_large_phone_photo_is_still_accepted() -> None:
+    assert validate_document(make_png(8000, 7000), "image/png", MAX * 4, 5).source_type == SourceType.IMAGE

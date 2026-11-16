@@ -11,6 +11,7 @@ from reportlab.lib.pagesizes import mm
 from reportlab.pdfgen import canvas
 
 from basketiq.pipeline import orchestrator, preprocess
+from basketiq.pipeline.limits import WORK_PIXELS
 from basketiq.pipeline.pdf_text import extract_pdf_text
 from basketiq.pipeline.preprocess import OcrTile, crop_to_paper, flatten_paper, ocr_tiles, tile_spans
 from basketiq.pipeline.schema import TextToken
@@ -147,3 +148,33 @@ def test_the_back_showing_through_is_washed_out_and_the_ink_kept_in_any_light() 
         assert level[200, left + 4] < 40  # ink: black
         assert level[700, left + 4] > 230  # show-through: gone
         assert level[1000, left + 4] > 230  # paper: white, in the light and in the shadow
+
+
+@pytest.mark.req("SEC-limits")
+def test_a_huge_pdf_page_is_rendered_within_the_pixel_budget() -> None:
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(14_400, 14_400))
+    c.drawString(100, 100, "x")
+    c.showPage()
+    c.save()
+    (page,) = preprocess.rasterize_pdf(buf.getvalue())
+    assert page.width * page.height <= WORK_PIXELS
+
+
+@pytest.mark.req("SEC-limits")
+def test_enlarging_a_very_long_strip_stays_within_the_pixel_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    from basketiq.pipeline import recognition
+
+    monkeypatch.setattr("basketiq.pipeline.limits.WORK_PIXELS", 1_000_000)
+    rounded = 1_010_000  # the budget, give or take the rounding to whole pixels
+    strip = Image.new("RGB", (100, 20_000), "white")
+    assert all(t.image.width * t.image.height <= rounded for t in ocr_tiles(strip))
+    seen: list[Image.Image] = []
+
+    def spy(paper: Image.Image, wash: bool = False) -> list[OcrTile]:
+        seen.append(paper)
+        return []
+
+    monkeypatch.setattr(recognition, "ocr_tiles", spy)
+    recognition.read_small_print(StubOcr(), strip, 100, [], 1)
+    assert seen and seen[0].width * seen[0].height <= rounded

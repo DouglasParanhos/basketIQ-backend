@@ -3,6 +3,7 @@ name: basketiq
 
 x-backend-env: &backend-env
   BASKETIQ_ENV: local
+  BASKETIQ_METRICS_HOST: 0.0.0.0  # reachable inside the compose network only: 9100 is not published
   BASKETIQ_DATABASE_URL: postgresql+psycopg://basketiq:basketiq@postgres:5432/basketiq
   BASKETIQ_REDIS_URL: redis://redis:6379/0
   BASKETIQ_S3_ENDPOINT_URL: http://storage:8333
@@ -30,7 +31,7 @@ services:
       POSTGRES_USER: basketiq
       POSTGRES_PASSWORD: basketiq
       POSTGRES_DB: basketiq
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U basketiq"]
@@ -39,7 +40,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:6379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
@@ -51,7 +52,7 @@ services:
     command: >-
       server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
       -s3.allowedOrigins=http://localhost:5173 -master.volumeSizeLimitMB=256
-    ports: ["9000:8333"]
+    ports: ["127.0.0.1:9000:8333"]
     volumes:
       - storagedata:/data
       - ./docker/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
@@ -66,7 +67,7 @@ services:
       SERVER_PORT: 8080
       JSON_CONFIG_PATH: /config/mock-oauth2.json
     volumes: [./docker/mock-oauth2.json:/config/mock-oauth2.json:ro]
-    ports: ["8080:8080"]
+    ports: ["127.0.0.1:8080:8080"]
 
   migrate:
     build: {context: ., target: api}
@@ -79,7 +80,7 @@ services:
   api:
     build: {context: ., target: api}
     environment: *backend-env
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]
     volumes: [./config:/app/config:ro]
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -108,7 +109,7 @@ services:
   ollama:
     image: ollama/ollama:0.6.8
     profiles: ["llm"]
-    ports: ["11434:11434"]
+    ports: ["127.0.0.1:11434:11434"]
     volumes: [ollamadata:/root/.ollama]
 
 volumes:

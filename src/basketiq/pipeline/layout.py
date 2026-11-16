@@ -7,6 +7,7 @@ from statistics import median
 
 from basketiq.pipeline.schema import AMOUNT_TOKEN, TextLine, TextToken
 
+MAX_LINE_CHARS = 300  # a receipt line is far shorter; longer is noise, and would only cost regex time
 _MAX_SKEW = 0.1  # dy/dx, about 5.7 degrees
 _MIN_LONG_TOKEN = 3  # a token this many heights wide has a reliable baseline angle
 _MIN_RELIABLE = 3  # long tokens needed nearby before their angle is trusted
@@ -163,4 +164,9 @@ def group_into_lines(tokens: list[TextToken], overlap_ratio: float = 0.5) -> lis
             current, centres = [token], [centre]
         if current:
             lines.extend(_split_stacked(current, centres, page))
-    return lines
+    return [line for line in lines if _length(line) <= MAX_LINE_CHARS]
+
+
+def _length(line: TextLine) -> int:
+    """The characters of the joined text, counted without building it (`TextLine.text` runs two regexes)."""
+    return sum(len(t.text) for t in line.tokens) + len(line.tokens) - 1
