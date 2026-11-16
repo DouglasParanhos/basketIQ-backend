@@ -15,6 +15,7 @@ from PIL import Image
 
 from basketiq.domain.money import one_digit_apart, parse_money_cents
 from basketiq.pipeline.layout import group_into_lines
+from basketiq.pipeline.limits import scaled_size
 from basketiq.pipeline.ocr import OcrEngine
 from basketiq.pipeline.parsers.base import MONEY
 from basketiq.pipeline.preprocess import OcrTile, ocr_tiles
@@ -47,7 +48,7 @@ def read_small_print(
     """`tokens` (read on the paper scaled to `width` pixels) completed by the two extra looks (`wash`: see
     `preprocess.ocr_tiles`)."""
     enlarged = paper.resize(
-        (SECOND_PASS_WIDTH, round(paper.height * SECOND_PASS_WIDTH / paper.width)), Image.Resampling.LANCZOS
+        scaled_size(paper.width, paper.height, SECOND_PASS_WIDTH / paper.width), Image.Resampling.LANCZOS
     )
     second = ocr_tiles(enlarged, wash)
     tokens = list(tokens)

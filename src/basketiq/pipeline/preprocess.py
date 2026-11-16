@@ -11,6 +11,9 @@ import pypdfium2 as pdfium
 from PIL import Image, ImageFilter, ImageOps
 from pillow_heif import register_heif_opener
 
+from basketiq.pipeline import limits
+from basketiq.pipeline.limits import fit_scale, fits, scaled_size
+
 register_heif_opener()
 
 TARGET_MIN_WIDTH = 900
@@ -65,9 +68,15 @@ def load_image(data: bytes) -> Image.Image:
 def rasterize_pdf(data: bytes, dpi: int = 200) -> list[Image.Image]:
     pdf = pdfium.PdfDocument(data)
     try:
-        return [page.render(scale=dpi / 72).to_pil().convert("RGB") for page in pdf]
+        return [render_page(page, dpi).convert("RGB") for page in pdf]
     finally:
         pdf.close()
+
+
+def render_page(page: pdfium.PdfPage, dpi: int) -> Image.Image:
+    """A PDF page at `dpi`, at less when it is so large that the render would pass the pixel budget."""
+    width, height = page.get_size()
+    return page.render(scale=fit_scale(width, height, dpi / 72)).to_pil()
 
 
 def prepare_for_ocr(image: Image.Image, wash: bool = False) -> Image.Image:
@@ -294,6 +303,8 @@ def flatten_paper(image: Image.Image) -> Image.Image:
         return _crop(image, box, scale) or _level_text(image, gray, threshold)
     pad_x, pad_y = PAPER_PADDING * width, PAPER_PADDING * height
     size = (round(width + 2 * pad_x), round(height + 2 * pad_y))
+    if not fits(*size, limits.WORK_PIXELS):
+        return _crop(image, box, scale) or _level_text(image, gray, threshold)
     output = (
         (pad_x, pad_y),
         (pad_x + width, pad_y),
@@ -375,7 +386,7 @@ def ocr_tiles(paper: Image.Image, wash: bool = False) -> list[OcrTile]:
         return [OcrTile(prepare_for_ocr(paper, wash), 0, 0.0, math.inf)]
     target = min(max(width, TILE_WIDTH), TILE_MAX_WIDTH)
     if target != width:
-        paper = paper.resize((target, round(height * target / width)), Image.Resampling.LANCZOS)
+        paper = paper.resize(scaled_size(width, height, target / width), Image.Resampling.LANCZOS)
     return [
         OcrTile(
             _contrast(paper.crop((0, top, paper.width, bottom)), wash),

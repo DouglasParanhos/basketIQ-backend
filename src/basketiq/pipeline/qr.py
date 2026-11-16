@@ -31,7 +31,7 @@ from basketiq.domain.money import format_cents
 from basketiq.domain.status import ProcessingRoute, SourceType
 from basketiq.pipeline.parsers.base import LISBON
 from basketiq.pipeline.parsers.totals import balance_used
-from basketiq.pipeline.preprocess import load_image
+from basketiq.pipeline.preprocess import load_image, render_page
 from basketiq.pipeline.schema import DocumentText, ParsedReceipt, TextLine
 
 QR_BUDGET_S = 2.0  # for the whole receipt, every photo included
@@ -120,7 +120,7 @@ def _tiers(data: bytes, source_type: SourceType, deadline: float) -> Iterator[np
             for index in range(min(len(pdf), MAX_PDF_PAGES)):
                 if time.perf_counter() >= deadline:
                     return
-                yield _gray(pdf[index].render(scale=PDF_DPI / 72).to_pil())
+                yield _gray(render_page(pdf[index], PDF_DPI))
         finally:
             pdf.close()
         return
