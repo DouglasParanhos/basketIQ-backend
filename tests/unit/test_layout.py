@@ -150,3 +150,11 @@ def test_rows_that_were_already_apart_are_untouched() -> None:
         [box("PAO", 50, 150, 100), box("1,00", 600, 700, 100), box("LEITE", 50, 150, 160)]
     )
     assert [line.text for line in lines] == ["PAO 1,00", "LEITE"]
+
+
+@pytest.mark.req("SEC-limits")
+def test_a_line_longer_than_any_receipt_line_is_dropped() -> None:
+    huge = TextToken(text="9" * 100_000, x0=0, x1=500, y0=0, y1=40, slope=0.0)
+    normal = TextToken(text="LEITE 1L", x0=0, x1=200, y0=100, y1=140, slope=0.0)
+    lines = group_into_lines([huge, normal])
+    assert [line.text for line in lines] == ["LEITE 1L"]
