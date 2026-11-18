@@ -22,7 +22,7 @@ jobs:
     name: Lint, types, security
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
         with:
           version: ${{ env.UV_VERSION }}
@@ -64,7 +64,7 @@ jobs:
       BASKETIQ_TEST_DATABASE_URL: postgresql+psycopg://basketiq:basketiq@localhost:5432/basketiq_test
       BASKETIQ_TEST_S3_ENDPOINT: http://localhost:9000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
         with:
           version: ${{ env.UV_VERSION }}
@@ -95,7 +95,7 @@ jobs:
         run: uv run python -m basketiq.eval.golden --dir tests/golden/synthetic --baseline tests/golden/baseline.json
       - name: Traceability matrix
         run: uv run python scripts/traceability.py --out reports/traceability.md
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: traceability
@@ -107,7 +107,7 @@ jobs:
     env:
       PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
         with:
           version: ${{ env.UV_VERSION }}
@@ -116,7 +116,7 @@ jobs:
       - name: System libraries for OpenCV/Paddle
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1
       - run: uv sync --all-extras
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.paddlex
           key: paddlex-${{ runner.os }}-${{ hashFiles('uv.lock') }}-doc-ori  # + the page-orientation model
@@ -132,9 +132,9 @@ jobs:
       matrix:
         target: [api, worker]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           target: ${{ matrix.target }}
