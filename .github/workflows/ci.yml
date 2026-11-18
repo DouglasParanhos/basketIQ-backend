@@ -95,7 +95,7 @@ jobs:
         run: uv run python -m basketiq.eval.golden --dir tests/golden/synthetic --baseline tests/golden/baseline.json
       - name: Traceability matrix
         run: uv run python scripts/traceability.py --out reports/traceability.md
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: traceability
