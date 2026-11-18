@@ -331,8 +331,8 @@ def _level_text(image: Image.Image, gray: np.ndarray, threshold: int) -> Image.I
         )
         return float(np.sum(np.diff(rows) ** 2))  # sharp changes: text lines and the gaps between them
 
-    coarse = max(np.arange(-TEXT_MAX_TILT, TEXT_MAX_TILT + 1, 1.0), key=sharpness)
-    angle = float(max(np.arange(coarse - 1, coarse + 1.01, 0.25), key=sharpness))
+    coarse = max(np.arange(-TEXT_MAX_TILT, TEXT_MAX_TILT + 1, 1.0).tolist(), key=sharpness)
+    angle = float(max(np.arange(coarse - 1, coarse + 1.01, 0.25).tolist(), key=sharpness))
     # Small print shrunk into the probe turns grey: the text is bounded by anything darker than half-way
     # between the ink and white, but lighter marks than the desk are not text.
     desk = int(np.median(np.concatenate([gray[0], gray[-1], gray[:, 0], gray[:, -1]])))
